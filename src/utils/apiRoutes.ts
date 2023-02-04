@@ -1,5 +1,5 @@
-export const host = "http://localhost:5000";
-// export const host = "https://chart-server-nu.vercel.app:5000";
+// export const host = "http://localhost:5000";
+export const host = "https://chart-server-nu.vercel.app:5000";
 export const connect = `${host}/api/auth/connect`;
 export const setWhale = `${host}/api/auth/setWhale`;
 export const setAvatarRoute = `${host}/api/auth/setAvatar`;

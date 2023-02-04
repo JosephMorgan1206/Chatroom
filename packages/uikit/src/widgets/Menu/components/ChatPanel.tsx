@@ -24,7 +24,8 @@ const StyledPanel = styled.div<{ showMenu: boolean; showChat: boolean; totalMenu
   flex-shrink: 0;
   background-color: ${({ theme }) => theme.nav.background};
   width: ${({ showChat }) => (showChat ? `340px` : 0)};
-  height: 100%;
+  height: auto;
+  max-height: 100%;
   transition: padding-top 0.2s, width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 11;
 //   overflow: ${({ showChat }) => (showChat ? "initial" : "hidden")};

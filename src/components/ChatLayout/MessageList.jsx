@@ -1,132 +1,440 @@
 /* eslint-disable */
-import styled from "styled-components";
-import truncateHash from "utils/truncateHash";
-import Jazzicon, { jsNumberForAddress } from 'react-jazzicon'
-import { useProfileForAddress } from 'state/profile/hooks'
+import React, { useEffect, useState, useRef } from 'react';
+import {
+    MDBRow,
+    MDBCol,
+    MDBCard,
+    MDBCardBody,
+    MDBIcon,
+    MDBCardFooter
+} from "mdb-react-ui-kit";
 
-const MessageList = ({ scrollRef, messages }) => {
-    const timeFormat = (time) => {
-        let result = time;
-        if (time < 10) {
-            result = "0" + time; 
+import styled, { css } from 'styled-components'
+import axios from "axios";
+import { io } from "socket.io-client";
+import EmojiPicker from 'emoji-picker-react'
+import {BsEmojiSmileFill} from 'react-icons/bs'
+// import { v4 as uuidv4} from "uuid";
+
+import { getAllMessagesRoute, sendMessageRoute, removeMessageRoute, recommendRoute, host } from '../../utils/apiRoutes'
+
+export default function MessageList({target, backTo, currentUser}) {
+
+    const socket = useRef();
+    const scrollRef = useRef();
+    socket.current = io(host);
+
+    const [arrivalMessage, setArrivalMessage] = useState(null);
+    const [messages, setMessages] = useState([]);
+    const [clicked, setClicked] = useState(false);
+    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    const [msg, setMsg] = useState("");
+    const [bReply, toggleReply] = useState(false);
+    const [pMessage, setPointMessage] = useState({});
+    const [points, setPoints] = useState({
+        x: 0,
+        y: 0,
+    });
+
+    // useEffect(
+    //     () => {
+    //         socket = useRef();
+    //         scrollRef = useRef();
+    //         socket.current = io(host);
+          
+    //       return () => {
+    //         socket.disconnect();
+    //       }
+    //     },
+    //     []
+    // )
+
+    useEffect(() => {
+        if (socket.current) {
+          socket.current.on("msg-recieved", (msg) => {
+            setArrivalMessage({
+                sender: msg.sender,
+                receiver: msg.receiver,
+                message: msg.message,
+                time: msg.time
+            });
+          })
         }
-        return result
+    
+    }, [socket]);
+
+    useEffect( () => {
+        const fetchMessages = async () => {
+            if (currentUser) {
+                const response = await axios.post(getAllMessagesRoute, {
+                  sender: target._id,
+                  receiver: currentUser._id
+                });
+                setMessages( response.data);
+            }
+        }
+        fetchMessages()
+    }, [currentUser])
+    
+    useEffect(()=>{
+        arrivalMessage && setMessages((prev)=>[...prev,arrivalMessage]);
+    },[arrivalMessage]);
+    
+      
+    useEffect(() => {
+        scrollRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [messages]);
+
+    useEffect(() => {
+        const handleClick = () => setClicked(false);
+        window.addEventListener("click", handleClick);
+        return () => {
+          window.removeEventListener("click", handleClick);
+        };
+    }, []);
+
+    const handleRecommendMsg = async () => {
+        const recommendMessage = async () => {
+            if (pMessage) {
+                const response = await axios.post(recommendRoute + pMessage._id);
+                fetchMessages();
+            }
+        }
+        recommendMessage()
+
+        const fetchMessages = async () => {
+            if (currentUser) {
+                const response = await axios.post(getAllMessagesRoute, {
+                  sender: target._id,
+                  receiver: currentUser._id
+                });
+                setMessages( response.data);
+            }
+        }    
     }
 
-    const AvatarWrapper = styled.div`
-        background-repeat: no-repeat;
-        background-size: cover;
-        border-radius: 50%;
-        position: relative;
-        width: 100%;
-        height: 100%;
-
-        & > img {
-            border-radius: 50%;
+    const handleSendMsg = async (msg) => {
+        const d = new Date();
+        if(bReply) {
+            const response = await axios.post(sendMessageRoute, {
+                sender: currentUser._id,
+                receiver: target._id,
+                message: msg,
+                time: d.getTime(),
+                reply: pMessage
+            });
+            socket.current.emit("send-msg", {
+                sender: currentUser._id,
+                receiver: target._id,
+                message: msg,
+                time: d.getTime(),
+                reply: pMessage
+            });
+            setMessages(response.data);
+        } else {
+            const response = await axios.post(sendMessageRoute, {
+                sender: currentUser._id,
+                receiver: target._id,
+                message: msg,
+                time: d.getTime(),
+                reply: null
+            });
+            socket.current.emit("send-msg", {
+                sender: currentUser._id,
+                receiver: target._id,
+                message: msg,
+                time: d.getTime(),
+                reply: null
+            });
+            setMessages(response.data);
         }
-    `
+        
 
-  return (
-    <div className = "chat-messages" style={{overflowY: "auto"}}  onContentSizeChange={() => this.scrollView.scrollToEnd({animated: true})}>
-        {messages.map((message, index) => {
-            const isAvatarSet = message.sender?.avatarImage !== ""
-            const getAllMessage = () => {
-                let _messageDiv = new Array();
-                _messageDiv.push(message);
-                let k = 1;
-                while(true) {
-                    if(index + k < messages.length && message.sender?.username === messages[index + k].sender.username){
-                        _messageDiv.push(messages[index + k])
-                    k++;
-                    }
-                    else if(index === messages.length - 1) break;
-                    else break;
-                }
+        // const msgs = [...messages];
+        // msgs.push({
+        //     sender: currentUser._id,
+        //     receiver: target,
+        //     message: { 'text': msg},
+        //     time: d.getTime()
+        // });
+    };
 
-                return _messageDiv
+    const handleEmojiPickerHideShow = ()=>{
+        setShowEmojiPicker(!showEmojiPicker);
+    };
+
+    const handleEmojiClick = (e,emoji)=>{
+        let message= msg;
+        message += e.emoji;
+        setMsg(message);
+    }
+
+    const sendChat = (e)=>{
+        e.preventDefault();
+        if(showEmojiPicker)
+            setShowEmojiPicker(!showEmojiPicker);
+        if(msg.length>0){
+            handleSendMsg(msg);
+            setMsg('');
+            toggleReply(false);
+        }
+    }
+
+    const goRecommend = () => {
+        handleRecommendMsg()
+    }
+
+    const goBack = () => {
+        backTo();
+    }
+
+    const goReply = () => {
+        toggleReply(true);
+    }
+
+    const goEdit = () => {
+        setMsg(pMessage.message.text);
+    }
+
+    const output = (ones) => {
+        if(ones.length > 0) {
+            let last = ones[ones.length - 1];
+            return last.message.text
+        }
+    }
+
+    const goRemove = () => {
+        const removeMessage = async () => {
+            if (pMessage) {
+                const response = await axios.delete(removeMessageRoute + pMessage._id);
+                fetchMessages();
             }
+        }
+        removeMessage()
 
-            if(index > 0 && message.sender?.username === messages[index-1].sender?.username){
-                return <></>
+        const fetchMessages = async () => {
+            if (currentUser) {
+                const response = await axios.post(getAllMessagesRoute, {
+                  sender: target._id,
+                  receiver: currentUser._id
+                });
+                setMessages( response.data);
             }
-            else {
-                return (
-                    
-                    <div ref={scrollRef} >
-                        <MessageContent>
-                            <div className="message-header">
-                                
-                                {isAvatarSet ? <img src = {message.sender?.avatarImage} width={24} style={{borderRadius: "12px"}} /> : 
-                                    <Jazzicon diameter={20} seed={jsNumberForAddress(message.sender?.address)} />
-                                }
-                                <p>{message.sender?.username.length > 9 ? truncateHash(message.sender?.username) : message.sender?.username}</p>
-                                {message.sender?.role === "admin" && <p className="badge role-badge">Admin</p>}
-                                {message.sender?.isWhale && 
-                                    <>
-                                        <img src={'/images/whale.svg'} width="24" className="whale-badge" />
-                                        {/* <p className="badge whale-badge">Whale</p> */}
-                                    </>
-                                }
-                            </div>
-                            {getAllMessage().map((_message) => {
-                                return (
-                                    <div className="message-content">
-                                        <p className="smaller-text">{timeFormat(new Date(_message.updatedAt).getHours())  + ':' + timeFormat(new Date(_message.updatedAt).getMinutes())}</p>
-                                        <p className="normal-text">{_message.message}</p>
-                                    </div>
-                                )
-                            })}                            
-                        </MessageContent>
+        }        
+    }
+
+    const timeFormat = (time) => {
+        var date = new Date(time);
+        var hours = date.getHours();
+        var minutes = "0" + date.getMinutes();
+        var formattedTime = hours + ':' + minutes.substr(-2);
+        return formattedTime
+    }
+
+    const diffTime = (time) => {
+        const d = new Date();
+        var Difference_In_Days = (d.getTime() - time) / (1000 * 3600 * 24);
+        return Math.floor(Difference_In_Days) == 0 ? 'today' : Math.floor(Difference_In_Days) + 'days ago'
+    }
+
+    return (
+        <Container>
+        <MDBRow>
+            <MDBCol md="12">
+                <MDBCard style={{border: 'solid 1px', marginBottom: '5px'}}>
+                    <div className="d-flex flex-row p-2">
+                        <div className="col-md-4 d-flex justify-content-between align-items-center">
+                            <i className="fas fa-angle-left" style={{cursor: 'pointer'}} onClick={goBack}></i>
+                            <img
+                                src="https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava1-bg.webp"
+                                alt="avatar"
+                                className="d-flex align-self-center me-3"
+                                width="40"
+                            />
+                        </div>
+                        <div className="pt-1 col-md-8">
+                            <p className="fw-bold mb-0 ellipsis">{target.username}</p>
+                            <p className="small text-muted ellipsis">
+                                {output(messages)}
+                            </p>
+                        </div>
                     </div>
-                );
-            }
-        })}
-    </div>
-  )
+                </MDBCard>
+                <MDBCard id="chat4">
+                    <MDBCardBody>                        
+                        {   
+                            messages&& messages.map((message, index) => {
+                                if(message.receiver == target._id) {
+                                    return (                                        
+                                        <div className="d-flex flex-row justify-content-end mb-4 pt-1" 
+                                            ref={scrollRef} key={index}                                           
+                                        >
+                                            <div>
+                                                <div 
+                                                    className="small p-2 me-3 mb-1 text-white rounded-3 bg-info" 
+                                                    style={{ maxWidth: '205px' }}
+                                                    onContextMenu={(e) => {
+                                                        e.preventDefault(); 
+                                                        setClicked(true);
+                                                        const rect = e.target.getBoundingClientRect();
+                                                        setPoints({
+                                                            x: e.pageX - rect.left,
+                                                            y: e.pageY - pageYOffset,
+                                                        });
+                                                        setPointMessage(message);
+                                                    }}
+                                                >
+                                                    { message.reply&& 
+                                                        <p 
+                                                            className="small me-3 italic" 
+                                                            style={{ maxWidth: '100%', fontSize: '17px', borderBottom: 'solid 1px', paddingBottom: '8px' }}
+                                                        >
+                                                            {message.reply.message.text}&nbsp;&nbsp;<span style={{fontSize: '14px'}}>{timeFormat(message.reply.time)}</span>
+                                                        </p>
+                                                    }
+                                                    <p style={{ marginTop: '10px' }}>{message.message.text}</p>
+                                                    { message.recommend&& <p>👍</p> }
+                                                </div>
+                                                <p className="small me-3 mb-3 rounded-3 text-muted d-flex justify-content-end">
+                                                    {timeFormat(message.time)}&nbsp;&nbsp;{diffTime(message.time)}
+                                                </p>
+                                            </div>
+                                            <img
+                                                src="https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava2-bg.webp"
+                                                alt="avatar 1"
+                                                style={{ width: "45px", height: "100%" }}
+                                            />
+                                        </div>
+                                    )
+                                } else {
+                                    return (
+                                        <div className="d-flex flex-row justify-content-start" ref={scrollRef} key={index}>
+                                            <img
+                                                src="https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava5-bg.webp"
+                                                alt="avatar 1"
+                                                style={{ width: "45px", height: "100%" }}
+                                            />
+                                            <div>
+                                                <div 
+                                                    className="small p-2 ms-3 mb-1 rounded-3"
+                                                    style={{ backgroundColor: "#f5f6f7", maxWidth: '205px' }}
+                                                    onContextMenu={(e) => {
+                                                        e.preventDefault(); 
+                                                        setClicked(true);
+                                                        setPoints({
+                                                          x: e.pageX,
+                                                          y: e.pageY,
+                                                        });
+                                                        setPointMessage(message);
+                                                    }}
+                                                >
+                                                    { message.reply&& 
+                                                        <p 
+                                                            className="small me-3 italic" 
+                                                            style={{ maxWidth: '100%', fontSize: '17px', borderBottom: 'solid 1px', paddingBottom: '8px' }}
+                                                        >
+                                                            {message.reply.message.text}&nbsp;&nbsp;<span style={{fontSize: '14px'}}>{timeFormat(message.reply.time)}</span>
+                                                        </p>
+                                                    }
+                                                    <p style={{ marginTop: '10px' }}>{message.message.text}</p>
+                                                    { message.recommend&& <p>👍</p> }
+                                                </div>
+                                                <p className="small ms-3 mb-3 rounded-3 text-muted">
+                                                    {timeFormat(message.time)}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )
+                                }
+
+                            })
+                        }         
+                    </MDBCardBody>
+                    { showEmojiPicker && <EmojiPicker onEmojiClick={handleEmojiClick} width="100%"/> }
+                    <div className="d-flex" style={{ justifyContent:"space-between", margin:"15px"}}>
+                    { bReply&& 
+                        <p 
+                            className="small italic" 
+                            style={{ maxWidth: '75%', fontSize: '17px', borderBottom: 'solid 1px', paddingBottom: '8px' }}
+                        >
+                            {pMessage.message.text}
+                        </p>
+                    }
+                        <span className="d-flex" style={{width: '25%'}}>
+                            <a className="ms-3 text-muted" href="#!">
+                                <div className="emoji" >
+                                    <BsEmojiSmileFill onClick={handleEmojiPickerHideShow}/>
+                                </div>
+                            </a>
+                            <a className="ms-3 link-info" href="#!" onClick={(e)=>sendChat(e)}>
+                                <MDBIcon fas icon="paper-plane" />
+                            </a>
+                        </span>
+                    </div>
+                    <MDBCardFooter className="text-muted d-flex justify-content-start align-items-center p-2">
+                        <textarea
+                            className="form-control form-control-lg"
+                            value={msg} onChange={(e)=>{setMsg(e.target.value)}}
+                            rows="3"
+                            placeholder="Type message"
+                        />                        
+                    </MDBCardFooter>
+                </MDBCard>
+            </MDBCol>
+        </MDBRow>  
+        { 
+            clicked && (
+            <ContextMenu top={points.y} left={points.x}>
+                <ul>
+                    <li onClick={goRecommend}><i className="fas fa-sign-language" style={{cursor: 'pointer'}}></i>&nbsp;&nbsp;&nbsp;Recommend</li>
+                    <li onClick={goEdit}><i className="fas fa-edit" style={{cursor: 'pointer'}}></i>&nbsp;&nbsp;&nbsp;Edit</li>
+                    <li onClick={goReply}><i className="fas fa-reply" style={{cursor: 'pointer'}}></i>&nbsp;&nbsp;&nbsp;Reply</li>
+                    <li onClick={goRemove}><i className="fas fa-trash-alt" style={{cursor: 'pointer'}}></i>&nbsp;&nbsp;&nbsp;Remove</li>
+                </ul>
+            </ContextMenu>
+        )}
+        </Container>
+    );
 }
 
-const MessageContent = styled.div`
-    margin: 8px;
-    padding: 4px;
-    background: ${({ theme }) => theme.colors.backgroundDisabled};
-    border-radius: 4px;
-
-    .message-header {
-        display: flex;
-        align-items: center;
-        padding: 8px 1px;
-        p {
-            padding-left: 4px;
-        }
-        .whale-badge {
-            margin-left: 8px;
-            margin-top: -5px;
-        }
-        .badge {
-            padding: 2px 4px;
-            font-size: 12px;
-            background: red;
-            margin-left: 8px;
-            border-radius: 4px;
-            color: white;
-        }
+const Container = styled.div`
+    .ellipsis {
+        white-space: nowrap;
+        width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
-    .message-content {
-        display: flex;
-        padding-top: 8px;
-        .smaller-text {
-            font-size: 12px;
-            font-weight: 400;
-            padding-top: 2px;
-            color: ${({ theme }) => theme.colors.textSubtle};
-        }
-        .normal-text {
-            padding-left: 4px;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
-            overflow: hidden;
-        }
+    .italic {
+        font-style: italic;
     }
-`
-export default MessageList
+`;
+
+const ContextMenu = styled.div`
+    position: absolute;
+    width: 200px;
+    background-color: white;
+    border: 1px solid;
+    border-radius: 5px;
+    box-sizing: border-box;
+    ${({ top, left }) => css`
+        top: ${top}px;
+        left: ${left}px;
+    `}
+    ul {
+        box-sizing: border-box;
+        padding: 10px 10px;
+        margin: 0;
+        list-style: none;
+    }
+    ul li {
+        padding: 8px 25px;
+        border-bottom: 1px solid
+    }
+    /* hover */
+    ul li:hover {
+        cursor: pointer;
+        color: #54b4d3;
+        background-color: aliceblue;
+    }
+`;

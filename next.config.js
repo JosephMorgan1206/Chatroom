@@ -47,6 +47,7 @@ const config = {
   swcMinify: true,
   images: {
     domains: ['static-nft.pancakeswap.com'],
+    unoptimized: true
   },
   async rewrites() {
     return [

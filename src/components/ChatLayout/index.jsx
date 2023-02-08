@@ -13,19 +13,19 @@ import { io } from "socket.io-client";
 import useGetTokenBalance from 'hooks/useTokenBalance';
 import { getBalanceAmount } from 'utils/formatBalance';
 import { useWeb3React } from '../../../packages/wagmi/src/useWeb3React';
-import { connect, host } from '../../utils/apiRoutes'
+import { connect, host, allUsersRoute, search } from '../../utils/apiRoutes'
 
 import 'mdb-react-ui-kit/dist/css/mdb.min.css';
 import "@fortawesome/fontawesome-free/css/all.min.css";
 
 import MessageList from './MessageList'
 import UserList from './UserList'
-import { allUsersRoute } from '../../utils/apiRoutes';
-import CircleLoader from 'components/Loader/CircleLoader';
 
 export default function ChatComponent() {
 
-  const socket = useRef();
+  const socket = io(host, {
+    transports: ['websocket']
+  });
   const { account, isConnected } = useWeb3React()
   const { balance: userCake, fetchStatus } = useGetTokenBalance("0xe9e7cea3dedca5984780bafc599bd69add087d56", account)
   const userCakeBalance = getBalanceAmount(userCake)
@@ -35,6 +35,7 @@ export default function ChatComponent() {
   const [users, setUsers] = useState([]);
   const [target, setTarget] = useState({});
   const [currentUser, setCurrentUser] = useState("")
+  const [arrivalUser, setArrivalUser] = useState(null);
 
   useEffect( () => {
     const connectUser = async() => {
@@ -42,11 +43,23 @@ export default function ChatComponent() {
         const whale = userCakeBalance.gt("2")
         const { data } = await axios.post(connect, {address: account, isWhale: whale})
         setCurrentUser(data.user);
-        // fetchUsers(data.user)
       }
     }
     connectUser()
   }, [account, fetchStatus])
+
+    useEffect(
+        () => {
+            socket.on("add-user-recieved", (one) => {
+                setArrivalUser({one});
+            });
+        },
+        []
+    )
+
+    useEffect(()=>{
+        arrivalUser && setUsers((prev)=>[...prev,arrivalUser]);
+    },[arrivalUser]);  
 
   useEffect(()=>{
     if(currentUser) {
@@ -55,9 +68,11 @@ export default function ChatComponent() {
    },[currentUser, msgEnable, showShow]);
 
   useEffect(()=>{
-    if(currentUser){
-      socket.current = io(host);
-      socket.current.emit("add-user", currentUser._id);
+    if(currentUser){      
+      socket.emit("add-user", currentUser);
+      // return () => {
+      //   socket.disconnect();
+      // }
     }
    },[currentUser]);
 
@@ -72,6 +87,14 @@ export default function ChatComponent() {
     setTarget(user);
   }
 
+  const searchUsers = async (keyword) => {
+    if(currentUser){  
+      const response = await axios.post(search, {keyword: keyword, id: currentUser._id})
+      setUsers(response.data);
+      console.log("hhhhhhhhhhhhhhhhhhhhhhh", response.data)
+    }
+  }
+
   const backTo = async() => {
     setEnableMsg(false);
   }
@@ -84,7 +107,7 @@ export default function ChatComponent() {
         </div>
       </MDBBtn>
       <MDBCollapse show={showShow} className="mt-3" style={{height: 'auto'}}>
-        { msgEnable ? <MessageList target={ target } backTo= {backTo} currentUser={currentUser}/> : <UserList showMessages={showMessages} users={ users }/> }
+        { msgEnable ? <MessageList target={ target } backTo= {backTo} currentUser={currentUser} socket={socket}/> : <UserList showMessages={showMessages} users={users} socket={socket} searchUsers={searchUsers}/> }
       </MDBCollapse>    
     </MDBContainer>
   );

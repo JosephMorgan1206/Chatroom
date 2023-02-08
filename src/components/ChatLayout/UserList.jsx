@@ -11,11 +11,19 @@ import {
 } from "mdb-react-ui-kit";
 import styled from 'styled-components'
 
-export default function UserList({users, showMessages}) {
+export default function UserList({users, showMessages, searchUsers}) {
+    const [keyword, setKeyword] = useState("");
     const getMessages = (e, user)=>{
         e.preventDefault();
         showMessages(user);
     };
+
+    const handleKeyDown = (event) => {
+        if (event.key === 'Enter') {
+            searchUsers(keyword); 
+        }
+    };
+
 
     return (
         <Container> 
@@ -29,6 +37,9 @@ export default function UserList({users, showMessages}) {
                             <MDBInputGroup className="rounded mb-3">
                             <input
                                 className="form-control rounded"
+                                value={keyword} 
+                                onChange={(e)=>{e.preventDefault(); setKeyword(e.target.value);}}
+                                onKeyDown={handleKeyDown}
                                 placeholder="Search"
                                 type="search"
                             />
@@ -52,10 +63,11 @@ export default function UserList({users, showMessages}) {
                                                 <div className="d-flex flex-row col-md-10">
                                                     <div className="col-md-2">
                                                         <img
-                                                        src="https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava1-bg.webp"
+                                                        src="/images/user2.png"
                                                         alt="avatar"
                                                         className="d-flex align-self-center me-3"
                                                         width="60"
+                                                        height="60"
                                                         />
                                                         <span className="badge bg-success badge-dot"></span>
                                                     </div>

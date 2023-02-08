@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { Box, Flex, LinkExternal } from '@pancakeswap/uikit'
 import styled from 'styled-components'
 import { Swiper, SwiperSlide } from "swiper/react";
@@ -38,10 +39,10 @@ const ImgSlideBox = () => {
           modules={[Autoplay, Pagination]}
           className="img-slider-box"
       >
-        {cardData.map((card) => {
+        {cardData.map((card, index) => {
           return (
 
-            <SwiperSlide>
+            <SwiperSlide key={index}>
               <StyledBox style={{background: `url(${card.img}) center center / cover no-repeat`}} onClick={()=> {window.open(card.link, "_blank")}} />
             </SwiperSlide>
           )

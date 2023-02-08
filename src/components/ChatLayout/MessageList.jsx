@@ -11,57 +11,50 @@ import {
 
 import styled, { css } from 'styled-components'
 import axios from "axios";
-import { io } from "socket.io-client";
 import EmojiPicker from 'emoji-picker-react'
 import {BsEmojiSmileFill} from 'react-icons/bs'
 // import { v4 as uuidv4} from "uuid";
 
-import { getAllMessagesRoute, sendMessageRoute, removeMessageRoute, recommendRoute, host } from '../../utils/apiRoutes'
+import { getAllMessagesRoute, sendMessageRoute, removeMessageRoute, recommendRoute, updateMessageRoute, host } from '../../utils/apiRoutes'
 
-export default function MessageList({target, backTo, currentUser}) {
+export default function MessageList({target, backTo, currentUser, socket}) {
 
-    const socket = useRef();
     const scrollRef = useRef();
-    socket.current = io(host);
-
     const [arrivalMessage, setArrivalMessage] = useState(null);
+    const [updatedMessage, setUpdateMessage] = useState(null);
     const [messages, setMessages] = useState([]);
     const [clicked, setClicked] = useState(false);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [msg, setMsg] = useState("");
     const [bReply, toggleReply] = useState(false);
     const [pMessage, setPointMessage] = useState({});
+    const [editable, setEditable] = useState(false);
     const [points, setPoints] = useState({
         x: 0,
         y: 0,
     });
 
-    // useEffect(
-    //     () => {
-    //         socket = useRef();
-    //         scrollRef = useRef();
-    //         socket.current = io(host);
-          
-    //       return () => {
-    //         socket.disconnect();
-    //       }
-    //     },
-    //     []
-    // )
-
-    useEffect(() => {
-        if (socket.current) {
-          socket.current.on("msg-recieved", (msg) => {
+    useEffect(
+        () => {
+          socket.on("add-msg-recieved", (msg) => {
             setArrivalMessage({
                 sender: msg.sender,
                 receiver: msg.receiver,
-                message: msg.message,
+                message: { text: msg.message },
                 time: msg.time
             });
-          })
-        }
-    
-    }, [socket]);
+          });
+          socket.on("update-msg-recieved", (msg) => {
+            setUpdateMessage({
+                _id: msg._id,
+                message: { text: msg.message },
+                time: msg.time,
+                recommend: msg.recommend
+            });
+          });
+        },
+        []
+      )
 
     useEffect( () => {
         const fetchMessages = async () => {
@@ -77,9 +70,18 @@ export default function MessageList({target, backTo, currentUser}) {
     }, [currentUser])
     
     useEffect(()=>{
+        if(updatedMessage) {
+            let msgs = messages.slice();
+            let search = msgs.find(o => o._id == updatedMessage._id);
+            updatedMessage.recommend? search.recommend = updatedMessage.recommend : search.message = updatedMessage.message;
+            search.message = updatedMessage.message;
+            setMessages(msgs);   
+        }
+    },[updatedMessage]);
+
+    useEffect(()=>{
         arrivalMessage && setMessages((prev)=>[...prev,arrivalMessage]);
-    },[arrivalMessage]);
-    
+    },[arrivalMessage]);    
       
     useEffect(() => {
         scrollRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -97,6 +99,14 @@ export default function MessageList({target, backTo, currentUser}) {
         const recommendMessage = async () => {
             if (pMessage) {
                 const response = await axios.post(recommendRoute + pMessage._id);
+                socket.emit("update-msg", {
+                    _id: pMessage._id,
+                    sender: currentUser._id,
+                    receiver: target._id,
+                    message: pMessage.message,
+                    time: pMessage.time,
+                    recommend: true
+                });
                 fetchMessages();
             }
         }
@@ -110,45 +120,75 @@ export default function MessageList({target, backTo, currentUser}) {
                 });
                 setMessages( response.data);
             }
-        }    
+        }            
     }
 
     const handleSendMsg = async (msg) => {
         const d = new Date();
-        if(bReply) {
-            const response = await axios.post(sendMessageRoute, {
-                sender: currentUser._id,
-                receiver: target._id,
-                message: msg,
-                time: d.getTime(),
-                reply: pMessage
-            });
-            socket.current.emit("send-msg", {
-                sender: currentUser._id,
-                receiver: target._id,
-                message: msg,
-                time: d.getTime(),
-                reply: pMessage
-            });
-            setMessages(response.data);
+        if(editable) {
+            const updateMessage = async () => {
+                if (pMessage) {
+                    const response = await axios.post(updateMessageRoute + pMessage._id, {
+                        message: msg,
+                        time: d.getTime(),
+                    });
+                    socket.emit("update-msg", {
+                        _id: pMessage._id,
+                        sender: currentUser._id,
+                        receiver: target._id,
+                        message: msg,
+                        time: d.getTime(),
+                        recommend: false
+                    });
+                    fetchMessages();
+                }
+            }
+            updateMessage()
+    
+            const fetchMessages = async () => {
+                if (currentUser) {
+                    const response = await axios.post(getAllMessagesRoute, {
+                      sender: target._id,
+                      receiver: currentUser._id
+                    });
+                    setMessages( response.data);
+                }
+            }               
         } else {
-            const response = await axios.post(sendMessageRoute, {
-                sender: currentUser._id,
-                receiver: target._id,
-                message: msg,
-                time: d.getTime(),
-                reply: null
-            });
-            socket.current.emit("send-msg", {
-                sender: currentUser._id,
-                receiver: target._id,
-                message: msg,
-                time: d.getTime(),
-                reply: null
-            });
-            setMessages(response.data);
-        }
-        
+            if(bReply) {
+                const response = await axios.post(sendMessageRoute, {
+                    sender: currentUser._id,
+                    receiver: target._id,
+                    message: msg,
+                    time: d.getTime(),
+                    reply: pMessage
+                });
+                socket.emit("send-msg", {
+                    sender: currentUser._id,
+                    receiver: target._id,
+                    message: msg,
+                    time: d.getTime(),
+                    reply: pMessage
+                });
+                setMessages(response.data);
+            } else {
+                const response = await axios.post(sendMessageRoute, {
+                    sender: currentUser._id,
+                    receiver: target._id,
+                    message: msg,
+                    time: d.getTime(),
+                    reply: null
+                });
+                socket.emit("send-msg", {
+                    sender: currentUser._id,
+                    receiver: target._id,
+                    message: msg,
+                    time: d.getTime(),
+                    reply: null
+                });
+                setMessages(response.data);
+            }
+        }        
 
         // const msgs = [...messages];
         // msgs.push({
@@ -169,14 +209,21 @@ export default function MessageList({target, backTo, currentUser}) {
         setMsg(message);
     }
 
+    const handleKeyDown = (event) => {
+        if (event.key === 'Enter') {
+            sendChat(event)
+        }
+    };
+
     const sendChat = (e)=>{
         e.preventDefault();
         if(showEmojiPicker)
             setShowEmojiPicker(!showEmojiPicker);
-        if(msg.length>0){
+        if(msg != ''){
             handleSendMsg(msg);
             setMsg('');
             toggleReply(false);
+            setEditable(false);
         }
     }
 
@@ -190,16 +237,19 @@ export default function MessageList({target, backTo, currentUser}) {
 
     const goReply = () => {
         toggleReply(true);
+        scrollRef.current?.scrollIntoView({ behavior: "smooth" });
     }
 
     const goEdit = () => {
         setMsg(pMessage.message.text);
+        setEditable(true);
+        scrollRef.current?.scrollIntoView({ behavior: "smooth" });
     }
 
     const output = (ones) => {
         if(ones.length > 0) {
             let last = ones[ones.length - 1];
-            return last.message.text
+            return last.message ? last.message.text : ''
         }
     }
 
@@ -233,8 +283,9 @@ export default function MessageList({target, backTo, currentUser}) {
 
     const diffTime = (time) => {
         const d = new Date();
+        d. setHours(0,0,0,0);
         var Difference_In_Days = (d.getTime() - time) / (1000 * 3600 * 24);
-        return Math.floor(Difference_In_Days) == 0 ? 'today' : Math.floor(Difference_In_Days) + 'days ago'
+        return Math.floor(Difference_In_Days) < 0 ? 'today' : Math.floor(Difference_In_Days) + 1 + ' days ago'
     }
 
     return (
@@ -246,10 +297,10 @@ export default function MessageList({target, backTo, currentUser}) {
                         <div className="col-md-4 d-flex justify-content-between align-items-center">
                             <i className="fas fa-angle-left" style={{cursor: 'pointer'}} onClick={goBack}></i>
                             <img
-                                src="https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava1-bg.webp"
+                                src="/images/user1.png"
                                 alt="avatar"
                                 className="d-flex align-self-center me-3"
-                                width="40"
+                                style={{ width: "40px", height: "40px" }}
                             />
                         </div>
                         <div className="pt-1 col-md-8">
@@ -263,7 +314,7 @@ export default function MessageList({target, backTo, currentUser}) {
                 <MDBCard id="chat4">
                     <MDBCardBody>                        
                         {   
-                            messages&& messages.map((message, index) => {
+                            messages.length > 0 && messages.map((message, index) => {
                                 if(message.receiver == target._id) {
                                     return (                                        
                                         <div className="d-flex flex-row justify-content-end mb-4 pt-1" 
@@ -300,9 +351,9 @@ export default function MessageList({target, backTo, currentUser}) {
                                                 </p>
                                             </div>
                                             <img
-                                                src="https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava2-bg.webp"
+                                                src="/images/user1.png"
                                                 alt="avatar 1"
-                                                style={{ width: "45px", height: "100%" }}
+                                                style={{ width: "40px", height: "40px" }}
                                             />
                                         </div>
                                     )
@@ -310,9 +361,9 @@ export default function MessageList({target, backTo, currentUser}) {
                                     return (
                                         <div className="d-flex flex-row justify-content-start" ref={scrollRef} key={index}>
                                             <img
-                                                src="https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava5-bg.webp"
+                                                src="/images/user2.png"
                                                 alt="avatar 1"
-                                                style={{ width: "45px", height: "100%" }}
+                                                style={{ width: "45px", height: "45px" }}
                                             />
                                             <div>
                                                 <div 
@@ -321,9 +372,10 @@ export default function MessageList({target, backTo, currentUser}) {
                                                     onContextMenu={(e) => {
                                                         e.preventDefault(); 
                                                         setClicked(true);
+                                                        const rect = e.target.getBoundingClientRect();
                                                         setPoints({
-                                                          x: e.pageX,
-                                                          y: e.pageY,
+                                                            x: e.pageX - rect.left,
+                                                            y: e.pageY - pageYOffset,
                                                         });
                                                         setPointMessage(message);
                                                     }}
@@ -336,11 +388,11 @@ export default function MessageList({target, backTo, currentUser}) {
                                                             {message.reply.message.text}&nbsp;&nbsp;<span style={{fontSize: '14px'}}>{timeFormat(message.reply.time)}</span>
                                                         </p>
                                                     }
-                                                    <p style={{ marginTop: '10px' }}>{message.message.text}</p>
+                                                    <p style={{ marginTop: '10px' }}>{message.message? message.message.text : ''}</p>
                                                     { message.recommend&& <p>👍</p> }
                                                 </div>
                                                 <p className="small ms-3 mb-3 rounded-3 text-muted">
-                                                    {timeFormat(message.time)}
+                                                    {timeFormat(message.time)}&nbsp;&nbsp;{diffTime(message.time)}
                                                 </p>
                                             </div>
                                         </div>
@@ -377,6 +429,7 @@ export default function MessageList({target, backTo, currentUser}) {
                             value={msg} onChange={(e)=>{setMsg(e.target.value)}}
                             rows="3"
                             placeholder="Type message"
+                            onKeyDown={handleKeyDown}
                         />                        
                     </MDBCardFooter>
                 </MDBCard>

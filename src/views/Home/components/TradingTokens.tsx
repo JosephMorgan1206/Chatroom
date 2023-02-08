@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { useEffect, useState } from "react";
 import { Box, Flex, Grid, LinkExternal, Text } from '@pancakeswap/uikit'
 import { useFetchTokens } from 'hooks/useClient'
@@ -52,8 +53,8 @@ const TradingTokens = () => {
           tokensData.map((token, index) => {
             if (from && index < 6 || !from && index > 5)
               return (
-                <a href={`/swap?outputCurrency=${token.contractAddress}`}>
-                  <Flex width={145}>
+                <a href={`/swap?outputCurrency=${token.contractAddress}`} key={'a' + index}>
+                  <Flex width={145} key={ 'token'+ index}>
                     <img src={token.logoUrl} alt="" width={40} style={{height: "40px"}} />
                     <Flex flexDirection="column" style={{marginLeft: "4px", width: "100%"}}>
                       <Flex justifyContent="space-between">
@@ -64,9 +65,6 @@ const TradingTokens = () => {
                     </Flex>
                   </Flex>
                 </a>
-              )
-              return (
-                <></>
               )
           })
         }

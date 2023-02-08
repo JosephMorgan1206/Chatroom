@@ -1,3 +1,4 @@
+/* eslint-disable */
 import React, { useEffect, useState } from 'react';
 import { Box, Flex, Image, Progress, ProgressBar } from '@pancakeswap/uikit'
 import styled from 'styled-components'
@@ -95,9 +96,9 @@ const TopSliderBar = () => {
             updateSwiperProgressBar( currentSlideDelay, swiper);
           }}
       >
-        {barData.map((bar) => {
+        {barData.map((bar, index) => {
           return (
-            <SwiperSlide>
+            <SwiperSlide key={index}>
                 <StyledBox onClick={()=> {window.open(bar.link, "_blank")}}>
                   <img src={bar.img} alt="Top Bar" />
                   <div style={{margin: "0px 10px"}}>

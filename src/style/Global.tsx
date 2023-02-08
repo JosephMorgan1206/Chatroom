@@ -317,7 +317,6 @@ const GlobalStyle = createGlobalStyle`
     position: absolute;
     right: 0;
     bottom: 0;
-    background: url('/images/gifts_blur.svg') no-repeat;
     background-size: contain;
     background-position: 100% 100%;
     width: 100%;

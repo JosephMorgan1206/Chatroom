@@ -19,6 +19,9 @@ import UserList from './UserList'
 export default function ChatComponent() {
 
   const socket = useRef();
+  socket.current = io(host, {
+    transports: ['websocket']
+  });
   const { account, isConnected } = useWeb3React()
   const { balance: userCake, fetchStatus } = useGetTokenBalance("0xe9e7cea3dedca5984780bafc599bd69add087d56", account)
   const userCakeBalance = getBalanceAmount(userCake)
@@ -42,10 +45,7 @@ export default function ChatComponent() {
   }, [account, fetchStatus])
 
   useEffect(()=>{
-    if(currentUser) {   
-      socket.current = io(host, {
-        transports: ['websocket']
-      }); 
+    if(currentUser) {          
       socket.current.emit("add-user", currentUser);
     }
   },[currentUser]);
@@ -53,20 +53,14 @@ export default function ChatComponent() {
   useEffect(() => 
       {
         if(socket.current) {
-          socket.current.on("add-user-recieved", (one) => {
-            setArrivalUser({one});
-          });
+          socket.current.on("add-user-recieved", (one) => setUsers([...users, one]))
           // return () => {
           //   socket.off('add-user-recieved');
           // };
         }
       },
-      []
-  )
-
-  useEffect(()=>{
-    arrivalUser && setUsers([...users,arrivalUser]);
-  },[arrivalUser]);  
+      [socket.current, users]
+  ) 
 
   useEffect( () => {
     const fetchUsers = async () => {

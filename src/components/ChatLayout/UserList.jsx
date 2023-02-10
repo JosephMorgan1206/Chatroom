@@ -10,19 +10,53 @@ import {
   MDBInputGroup,
 } from "mdb-react-ui-kit";
 import styled from 'styled-components'
+import axios from "axios";
+import { login } from '../../utils/apiRoutes'
+import useToast from 'hooks/useToast'
 
 export default function UserList({users, showMessages, searchUsers}) {
     const [keyword, setKeyword] = useState("");
+    const [password, setPassword] = useState("");
+    const [show_login, showLogin] = useState(false);
+    const [target, selectTarget] = useState("");
+    const { toastError } = useToast();
+
     const getMessages = (e, user)=>{
         e.preventDefault();
-        showMessages(user);
+        showLogin(true);
+        selectTarget(user);
     };
 
     const handleKeyDown = (event) => {
         if (event.key === 'Enter') {
-            searchUsers(keyword); 
+            if(show_login) {
+                loginAction();
+            } else {
+                searchUsers(keyword); 
+            }
         }
     };
+
+    const loginAction = () => {
+        const loginServer = async () => {
+            if (password) {
+                const response = await axios.post(login, {
+                  password: password
+                });
+                if(response.data.status) {
+                    showMessages(target);
+                    showLogin(false);
+                    setKeyword("");
+                    setPassword("");
+                } else {
+                    toastError('Error', 'Login information is incrorrect!')
+                }
+            } else {
+                toastError('Error', 'Password is required!')
+            }
+        }
+        loginServer()
+    }
 
 
     return (
@@ -34,22 +68,47 @@ export default function UserList({users, showMessages, searchUsers}) {
                     <MDBRow>
                         <MDBCol className="mb-4 mb-md-0">
                         <div className="p-1">
-                            <MDBInputGroup className="rounded mb-3">
-                            <input
-                                className="form-control rounded"
-                                value={keyword} 
-                                onChange={(e)=>{e.preventDefault(); setKeyword(e.target.value);}}
-                                onKeyDown={handleKeyDown}
-                                placeholder="Search"
-                                type="search"
-                            />
-                            <span
-                                className="input-group-text border-0"
-                                id="search-addon"
-                            >
-                                <MDBIcon fas icon="search" />
-                            </span>
-                            </MDBInputGroup>
+                            {
+                                show_login ?
+                                <MDBInputGroup className="rounded mb-3">
+                                    <input
+                                        className="form-control rounded"
+                                        type="text"
+                                        value={password} 
+                                        onChange={(e)=>{e.preventDefault(); setPassword(e.target.value);}}
+                                        onKeyDown={handleKeyDown}
+                                        placeholder="Please input the Password"
+                                        style={{borderColor: 'blue'}}
+                                        autoFocus 
+                                    />
+                                    <button
+                                        className="input-group-text rounded"
+                                        style={{marginLeft: "10px", background: "yellowgreen", color: "white"}}
+                                        id="login-addon"
+                                        onClick={loginAction}
+                                    >
+                                        login
+                                    </button>
+                                </MDBInputGroup>
+                                : <MDBInputGroup className="rounded mb-3">
+                                    <input
+                                        type="text"
+                                        className="form-control rounded"
+                                        value={keyword} 
+                                        onChange={(e)=>{e.preventDefault(); setKeyword(e.target.value);}}
+                                        onKeyDown={handleKeyDown}
+                                        placeholder="Search"
+                                        autoFocus 
+                                    />
+                                    <span
+                                        className="input-group-text border-0"
+                                        id="search-addon"
+                                    >
+                                        <MDBIcon fas icon="search" />
+                                    </span>
+                                </MDBInputGroup>        
+
+                            }                                              
 
                             <MDBTypography listUnStyled className="mb-0">
                                 {

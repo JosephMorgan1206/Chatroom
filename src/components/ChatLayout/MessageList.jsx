@@ -166,19 +166,14 @@ export default function MessageList({target, backTo, currentUser, socket}) {
 
     useEffect(() => {
         if (socket.current) {
-            socket.current.on("add-msg-recieved", (msg) => {
-                setMessages([...messages, msg]);
-            });
-            socket.current.on("update-msg-recieved", (msg) => {
-                setUpdateMessage({
-                    _id: msg._id,
-                    message: { text: msg.message },
-                    time: msg.time,
-                    recommend: msg.recommend
-                });
-            });
-        }
-      }, [messages]);
+            socket.current.on("add-msg-recieved", (msg) => setMessages([...messages, msg]));
+            socket.current.on("update-msg-recieved", (msg) =>  setUpdateMessage({
+                _id: msg._id,
+                message: { text: msg.message },
+                time: msg.time,
+                recommend: msg.recommend
+            }))}
+    }, [socket.current, messages]);
 
     const handleEmojiPickerHideShow = ()=>{
         setShowEmojiPicker(!showEmojiPicker);
@@ -194,7 +189,7 @@ export default function MessageList({target, backTo, currentUser, socket}) {
         if (event.key === 'Enter') {
             sendChat(event)
         } 
-        if (event.key === 'Esc') {
+        if (event.key === 'Escape') {
             setMsg('');
             event.target.blur();
             scrollRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -283,7 +278,7 @@ export default function MessageList({target, backTo, currentUser, socket}) {
                         <div className="col-md-4 d-flex justify-content-between align-items-center">
                             <i className="fas fa-angle-left" style={{cursor: 'pointer'}} onClick={goBack}></i>
                             <img
-                                src="/images/user1.png"
+                                src="/images/user2.png"
                                 alt="avatar"
                                 className="d-flex align-self-center me-3"
                                 style={{ width: "40px", height: "40px" }}

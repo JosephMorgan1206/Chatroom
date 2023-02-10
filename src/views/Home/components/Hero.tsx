@@ -128,12 +128,7 @@ const Hero = () => {
           mb={['24px', null, null, '0']}
           position="relative"
         >
-          <BunnyWrapper>
             <Image src={bunnyImage} priority placeholder="blur" alt={t('Lunar bunny')} />
-          </BunnyWrapper>
-          <StarsWrapper>
-            <CompositeImage {...starsImage} />
-          </StarsWrapper>
         </Flex>
       </Flex>
     </>

@@ -1,13 +1,8 @@
 /* eslint-disable */
 import React, { useEffect, useState, useRef } from 'react';
-
 import {
-  MDBContainer,
-  MDBIcon,
-  MDBBtn,
-  MDBCollapse,
+  MDBContainer, MDBBtn, MDBCollapse,
 } from "mdb-react-ui-kit";
-
 import axios from "axios";
 import { io } from "socket.io-client";
 import useGetTokenBalance from 'hooks/useTokenBalance';
@@ -23,9 +18,7 @@ import UserList from './UserList'
 
 export default function ChatComponent() {
 
-  const socket = io(host, {
-    transports: ['websocket']
-  });
+  const socket = useRef();
   const { account, isConnected } = useWeb3React()
   const { balance: userCake, fetchStatus } = useGetTokenBalance("0xe9e7cea3dedca5984780bafc599bd69add087d56", account)
   const userCakeBalance = getBalanceAmount(userCake)
@@ -48,39 +41,43 @@ export default function ChatComponent() {
     connectUser()
   }, [account, fetchStatus])
 
-    useEffect(
-        () => {
-            socket.on("add-user-recieved", (one) => {
-                setArrivalUser({one});
-            });
-        },
-        []
-    )
+  useEffect(()=>{
+    if(currentUser) {   
+      socket.current = io(host, {
+        transports: ['websocket']
+      }); 
+      socket.current.emit("add-user", currentUser);
+    }
+  },[currentUser]);
 
-    useEffect(()=>{
-        arrivalUser && setUsers((prev)=>[...prev,arrivalUser]);
-    },[arrivalUser]);  
+  useEffect(() => 
+      {
+        if(socket.current) {
+          socket.current.on("add-user-recieved", (one) => {
+            setArrivalUser({one});
+          });
+          // return () => {
+          //   socket.off('add-user-recieved');
+          // };
+        }
+      },
+      []
+  )
 
   useEffect(()=>{
-    if(currentUser) {
-      fetchUsers(currentUser)
+    arrivalUser && setUsers([...users,arrivalUser]);
+  },[arrivalUser]);  
+
+  useEffect( () => {
+    const fetchUsers = async () => {
+      if(currentUser) {
+        const response = await axios.post(allUsersRoute + currentUser._id);
+        setUsers( response.data);
+      }
     }
-   },[currentUser, msgEnable, showShow]);
-
-  useEffect(()=>{
-    if(currentUser){      
-      socket.emit("add-user", currentUser);
-      // return () => {
-      //   socket.disconnect();
-      // }
-    }
-   },[currentUser]);
-
-  const fetchUsers = async (user) => {
-    const response = await axios.post(allUsersRoute + user?._id);
-    setUsers( response.data);
-  }
-
+    fetchUsers();
+  }, [currentUser]);
+ 
   const toggleShow = () => setShowShow(!showShow);
   const showMessages = (user) => {
     setEnableMsg(true);
@@ -91,7 +88,6 @@ export default function ChatComponent() {
     if(currentUser){  
       const response = await axios.post(search, {keyword: keyword, id: currentUser._id})
       setUsers(response.data);
-      console.log("hhhhhhhhhhhhhhhhhhhhhhh", response.data)
     }
   }
 

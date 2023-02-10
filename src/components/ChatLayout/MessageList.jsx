@@ -34,28 +34,6 @@ export default function MessageList({target, backTo, currentUser, socket}) {
         y: 0,
     });
 
-    useEffect(
-        () => {
-          socket.on("add-msg-recieved", (msg) => {
-            setArrivalMessage({
-                sender: msg.sender,
-                receiver: msg.receiver,
-                message: { text: msg.message },
-                time: msg.time
-            });
-          });
-          socket.on("update-msg-recieved", (msg) => {
-            setUpdateMessage({
-                _id: msg._id,
-                message: { text: msg.message },
-                time: msg.time,
-                recommend: msg.recommend
-            });
-          });
-        },
-        []
-      )
-
     useEffect( () => {
         const fetchMessages = async () => {
             if (currentUser) {
@@ -77,11 +55,7 @@ export default function MessageList({target, backTo, currentUser, socket}) {
             search.message = updatedMessage.message;
             setMessages(msgs);   
         }
-    },[updatedMessage]);
-
-    useEffect(()=>{
-        arrivalMessage && setMessages((prev)=>[...prev,arrivalMessage]);
-    },[arrivalMessage]);    
+    },[updatedMessage]); 
       
     useEffect(() => {
         scrollRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -99,7 +73,7 @@ export default function MessageList({target, backTo, currentUser, socket}) {
         const recommendMessage = async () => {
             if (pMessage) {
                 const response = await axios.post(recommendRoute + pMessage._id);
-                socket.emit("update-msg", {
+                socket.current.emit("update-msg", {
                     _id: pMessage._id,
                     sender: currentUser._id,
                     receiver: target._id,
@@ -124,22 +98,21 @@ export default function MessageList({target, backTo, currentUser, socket}) {
     }
 
     const handleSendMsg = async (msg) => {
-        const d = new Date();
         if(editable) {
             const updateMessage = async () => {
                 if (pMessage) {
                     const response = await axios.post(updateMessageRoute + pMessage._id, {
                         message: msg,
-                        time: d.getTime(),
+                        time: Date.now(),
                     });
-                    socket.emit("update-msg", {
+                    socket.current.emit("update-msg", {
                         _id: pMessage._id,
                         sender: currentUser._id,
                         receiver: target._id,
                         message: msg,
-                        time: d.getTime(),
+                        time: Date.now(),
                         recommend: false
-                    });
+                    });                    
                     fetchMessages();
                 }
             }
@@ -160,14 +133,14 @@ export default function MessageList({target, backTo, currentUser, socket}) {
                     sender: currentUser._id,
                     receiver: target._id,
                     message: msg,
-                    time: d.getTime(),
+                    time: Date.now(),
                     reply: pMessage
                 });
-                socket.emit("send-msg", {
+                socket.current.emit("send-msg", {
                     sender: currentUser._id,
                     receiver: target._id,
-                    message: msg,
-                    time: d.getTime(),
+                    message: { text: msg },
+                    time: Date.now(),
                     reply: pMessage
                 });
                 setMessages(response.data);
@@ -176,28 +149,36 @@ export default function MessageList({target, backTo, currentUser, socket}) {
                     sender: currentUser._id,
                     receiver: target._id,
                     message: msg,
-                    time: d.getTime(),
+                    time: Date.now(),
                     reply: null
                 });
-                socket.emit("send-msg", {
+                socket.current.emit("send-msg", {
                     sender: currentUser._id,
                     receiver: target._id,
-                    message: msg,
-                    time: d.getTime(),
+                    message: { text: msg },
+                    time: Date.now(),
                     reply: null
-                });
+                });                
                 setMessages(response.data);
             }
         }        
-
-        // const msgs = [...messages];
-        // msgs.push({
-        //     sender: currentUser._id,
-        //     receiver: target,
-        //     message: { 'text': msg},
-        //     time: d.getTime()
-        // });
     };
+
+    useEffect(() => {
+        if (socket.current) {
+            socket.current.on("add-msg-recieved", (msg) => {
+                setMessages([...messages, msg]);
+            });
+            socket.current.on("update-msg-recieved", (msg) => {
+                setUpdateMessage({
+                    _id: msg._id,
+                    message: { text: msg.message },
+                    time: msg.time,
+                    recommend: msg.recommend
+                });
+            });
+        }
+      }, [messages]);
 
     const handleEmojiPickerHideShow = ()=>{
         setShowEmojiPicker(!showEmojiPicker);
@@ -212,7 +193,12 @@ export default function MessageList({target, backTo, currentUser, socket}) {
     const handleKeyDown = (event) => {
         if (event.key === 'Enter') {
             sendChat(event)
-        }
+        } 
+        if (event.key === 'Esc') {
+            setMsg('');
+            event.target.blur();
+            scrollRef.current?.scrollIntoView({ behavior: "smooth" });
+        } 
     };
 
     const sendChat = (e)=>{
@@ -282,8 +268,8 @@ export default function MessageList({target, backTo, currentUser, socket}) {
     }
 
     const diffTime = (time) => {
-        const d = new Date();
-        d. setHours(0,0,0,0);
+        let d = new Date();
+        d.setHours(0,0,0);
         var Difference_In_Days = (d.getTime() - time) / (1000 * 3600 * 24);
         return Math.floor(Difference_In_Days) < 0 ? 'today' : Math.floor(Difference_In_Days) + 1 + ' days ago'
     }
@@ -318,7 +304,7 @@ export default function MessageList({target, backTo, currentUser, socket}) {
                                 if(message.receiver == target._id) {
                                     return (                                        
                                         <div className="d-flex flex-row justify-content-end mb-4 pt-1" 
-                                            ref={scrollRef} key={index}                                           
+                                            ref={scrollRef} key={'message' + index}                                           
                                         >
                                             <div>
                                                 <div 
@@ -437,11 +423,18 @@ export default function MessageList({target, backTo, currentUser, socket}) {
         </MDBRow>  
         { 
             clicked && (
-            <ContextMenu top={points.y} left={points.x}>
+                pMessage._id == currentUser._id ?
+                <ContextMenu top={points.y} left={points.x}>
+                    <ul>
+                        <li onClick={goRecommend}><i className="fas fa-sign-language" style={{cursor: 'pointer'}}></i>&nbsp;&nbsp;&nbsp;Recommend</li>
+                        <li onClick={goReply}><i className="fas fa-reply" style={{cursor: 'pointer'}}></i>&nbsp;&nbsp;&nbsp;Reply</li>
+                        <li onClick={goRemove}><i className="fas fa-trash-alt" style={{cursor: 'pointer'}}></i>&nbsp;&nbsp;&nbsp;Remove</li>
+                    </ul>
+                </ContextMenu>
+                :<ContextMenu top={points.y} left={points.x}>
                 <ul>
-                    <li onClick={goRecommend}><i className="fas fa-sign-language" style={{cursor: 'pointer'}}></i>&nbsp;&nbsp;&nbsp;Recommend</li>
                     <li onClick={goEdit}><i className="fas fa-edit" style={{cursor: 'pointer'}}></i>&nbsp;&nbsp;&nbsp;Edit</li>
-                    <li onClick={goReply}><i className="fas fa-reply" style={{cursor: 'pointer'}}></i>&nbsp;&nbsp;&nbsp;Reply</li>
+                    <li onClick={goReply}><i className="fas fa-reply" style={{cursor: 'pointer'}}></i>&nbsp;&nbsp;&nbsp;Forward</li>
                     <li onClick={goRemove}><i className="fas fa-trash-alt" style={{cursor: 'pointer'}}></i>&nbsp;&nbsp;&nbsp;Remove</li>
                 </ul>
             </ContextMenu>

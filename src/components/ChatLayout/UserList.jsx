@@ -78,12 +78,12 @@ export default function UserList({users, showMessages, searchUsers}) {
                                         onChange={(e)=>{e.preventDefault(); setPassword(e.target.value);}}
                                         onKeyDown={handleKeyDown}
                                         placeholder="Please input the Password"
-                                        style={{borderColor: 'blue'}}
+                                        style={{borderColor: 'red'}}
                                         autoFocus 
                                     />
                                     <button
                                         className="input-group-text rounded"
-                                        style={{marginLeft: "10px", background: "yellowgreen", color: "white"}}
+                                        style={{marginLeft: "10px", background: "red", color: "white"}}
                                         id="login-addon"
                                         onClick={loginAction}
                                     >
@@ -113,39 +113,41 @@ export default function UserList({users, showMessages, searchUsers}) {
                             <MDBTypography listUnStyled className="mb-0">
                                 {
                                     users && users.map((user, index) => {
-                                        return (
-                                            <li className="p-2 border-bottom" key={index} onClick={(e) => getMessages(e, user)}>
-                                            <a
-                                                href="#"
-                                                className="d-flex justify-content-between user-item"
-                                            >
-                                                <div className="d-flex flex-row col-md-10">
-                                                    <div className="col-md-2">
-                                                        <img
-                                                        src="/images/user2.png"
-                                                        alt="avatar"
-                                                        className="d-flex align-self-center me-3"
-                                                        width="60"
-                                                        height="60"
-                                                        />
-                                                        <span className="badge bg-success badge-dot"></span>
+                                        if(user.username) {
+                                            return (
+                                                <li className="p-2 border-bottom" key={index} onClick={(e) => getMessages(e, user)}>
+                                                <a
+                                                    href="#"
+                                                    className="d-flex justify-content-between user-item"
+                                                >
+                                                    <div className="d-flex flex-row col-md-10">
+                                                        <div className="col-md-2">
+                                                            <img
+                                                            src="/images/user2.png"
+                                                            alt="avatar"
+                                                            className="d-flex align-self-center me-3"
+                                                            width="60"
+                                                            height="60"
+                                                            />
+                                                            <span className="badge bg-success badge-dot"></span>
+                                                        </div>
+                                                        <div className="pt-1 col-md-10">
+                                                            <p className="fw-bold mb-0 ellipsis">{user.username}</p>
+                                                            <p className="small text-muted ellipsis">
+                                                            Hello, How are you?
+                                                            </p>
+                                                        </div>
                                                     </div>
-                                                    <div className="pt-1 col-md-10">
-                                                        <p className="fw-bold mb-0 ellipsis">{user.username}</p>
-                                                        <p className="small text-muted ellipsis">
-                                                        Hello, How are you?
-                                                        </p>
+                                                    <div className="pt-1 col-md-2">
+                                                        <p className="small text-muted mb-1">Just now</p>
+                                                        <span className="badge bg-danger rounded-pill float-end">
+                                                            {user.count >0 ? user.count : null}
+                                                        </span>
                                                     </div>
-                                                </div>
-                                                <div className="pt-1 col-md-2">
-                                                    <p className="small text-muted mb-1">Just now</p>
-                                                    <span className="badge bg-danger rounded-pill float-end">
-                                                        {user.count >0 ? user.count : null}
-                                                    </span>
-                                                </div>
-                                            </a>
-                                            </li>
-                                        )
+                                                </a>
+                                                </li>
+                                            )
+                                        }
                                     })
                                 }
                             </MDBTypography>

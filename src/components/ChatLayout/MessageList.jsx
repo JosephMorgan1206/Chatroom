@@ -13,6 +13,7 @@ import styled, { css } from 'styled-components'
 import axios from "axios";
 import EmojiPicker from 'emoji-picker-react'
 import {BsEmojiSmileFill} from 'react-icons/bs'
+import useToast from 'hooks/useToast'
 // import { v4 as uuidv4} from "uuid";
 
 import { getAllMessagesRoute, sendMessageRoute, removeMessageRoute, recommendRoute, updateMessageRoute, host } from '../../utils/apiRoutes'
@@ -20,7 +21,6 @@ import { getAllMessagesRoute, sendMessageRoute, removeMessageRoute, recommendRou
 export default function MessageList({target, backTo, currentUser, socket}) {
 
     const scrollRef = useRef();
-    const [arrivalMessage, setArrivalMessage] = useState(null);
     const [updatedMessage, setUpdateMessage] = useState(null);
     const [messages, setMessages] = useState([]);
     const [clicked, setClicked] = useState(false);
@@ -33,6 +33,7 @@ export default function MessageList({target, backTo, currentUser, socket}) {
         x: 0,
         y: 0,
     });
+    const { toastError } = useToast();
 
     useEffect( () => {
         const fetchMessages = async () => {
@@ -50,9 +51,24 @@ export default function MessageList({target, backTo, currentUser, socket}) {
     useEffect(()=>{
         if(updatedMessage) {
             let msgs = messages.slice();
-            let search = msgs.find(o => o._id == updatedMessage._id);
-            updatedMessage.recommend? search.recommend = updatedMessage.recommend : search.message = updatedMessage.message;
-            search.message = updatedMessage.message;
+            if(updatedMessage.recommend) {
+                let search = msgs.find(o => o._id == updatedMessage.id);
+                search.recommend = updatedMessage.recommend;
+                search.message = updatedMessage.message;
+                search.time = updatedMessage.time;
+            } else {
+                let index = 0;
+                let search = null;
+                msgs.map((msg, order)=> {
+                    if(msg._id == updatedMessage.id) index = order; search = msg
+                })
+                delete msgs[index];
+                search.recommend = updatedMessage.recommend;
+                search.message = updatedMessage.message;
+                search.time = updatedMessage.time;
+                msgs.push(search);
+                msgs.pop();
+            }
             setMessages(msgs);   
         }
     },[updatedMessage]); 
@@ -72,29 +88,22 @@ export default function MessageList({target, backTo, currentUser, socket}) {
     const handleRecommendMsg = async () => {
         const recommendMessage = async () => {
             if (pMessage) {
-                const response = await axios.post(recommendRoute + pMessage._id);
+                await axios.post(recommendRoute + pMessage._id);
                 socket.current.emit("update-msg", {
-                    _id: pMessage._id,
-                    sender: currentUser._id,
+                    id: pMessage._id,
                     receiver: target._id,
                     message: pMessage.message,
                     time: pMessage.time,
                     recommend: true
                 });
-                fetchMessages();
             }
         }
         recommendMessage()
-
-        const fetchMessages = async () => {
-            if (currentUser) {
-                const response = await axios.post(getAllMessagesRoute, {
-                  sender: target._id,
-                  receiver: currentUser._id
-                });
-                setMessages( response.data);
-            }
-        }            
+      
+        let msgs = messages.slice();
+        let search = msgs.find(o => o._id == pMessage._id);
+        search.recommend = true;
+        setMessages(msgs);      
     }
 
     const handleSendMsg = async (msg) => {
@@ -105,11 +114,14 @@ export default function MessageList({target, backTo, currentUser, socket}) {
                         message: msg,
                         time: Date.now(),
                     });
+                    if(!response.data.status) {
+                        toastError('Error', 'Server is disconnected!');
+                        return;
+                    }
                     socket.current.emit("update-msg", {
-                        _id: pMessage._id,
-                        sender: currentUser._id,
+                        id: pMessage._id,
                         receiver: target._id,
-                        message: msg,
+                        message: { text: msg },
                         time: Date.now(),
                         recommend: false
                     });                    
@@ -136,6 +148,10 @@ export default function MessageList({target, backTo, currentUser, socket}) {
                     time: Date.now(),
                     reply: pMessage
                 });
+                if(!response.data.status) {
+                    toastError('Error', 'Server is disconnected!');
+                    return;
+                }
                 socket.current.emit("send-msg", {
                     sender: currentUser._id,
                     receiver: target._id,
@@ -143,7 +159,16 @@ export default function MessageList({target, backTo, currentUser, socket}) {
                     time: Date.now(),
                     reply: pMessage
                 });
-                setMessages(response.data);
+                const msgs = [...messages];
+                msgs.push({
+                    sender: currentUser._id,
+                    receiver: target._id,
+                    message: { text: msg },
+                    recommend: false,
+                    time: Date.now(),
+                    reply: pMessage
+                });
+                setMessages(msgs);
             } else {
                 const response = await axios.post(sendMessageRoute, {
                     sender: currentUser._id,
@@ -152,6 +177,10 @@ export default function MessageList({target, backTo, currentUser, socket}) {
                     time: Date.now(),
                     reply: null
                 });
+                if(!response.data.status) {
+                    toastError('Error', 'Server is disconnected!');
+                    return;
+                }
                 socket.current.emit("send-msg", {
                     sender: currentUser._id,
                     receiver: target._id,
@@ -159,21 +188,27 @@ export default function MessageList({target, backTo, currentUser, socket}) {
                     time: Date.now(),
                     reply: null
                 });                
-                setMessages(response.data);
+                const msgs = [...messages];
+                msgs.push({
+                    sender: currentUser._id,
+                    receiver: target._id,
+                    message: { text: msg },
+                    recommend: false,
+                    time: Date.now(),
+                    reply: null
+                });
+                setMessages(msgs);
             }
         }        
     };
 
     useEffect(() => {
         if (socket.current) {
-            socket.current.on("add-msg-recieved", (msg) => setMessages([...messages, msg]));
-            socket.current.on("update-msg-recieved", (msg) =>  setUpdateMessage({
-                _id: msg._id,
-                message: { text: msg.message },
-                time: msg.time,
-                recommend: msg.recommend
-            }))}
-    }, [socket.current, messages]);
+            socket.current.on("msg-recieved", (msg) => {setMessages([...messages, msg])});
+            socket.current.on("update-msg-recieved", (msg) =>  setUpdateMessage(msg));
+            socket.current.on("remove-msg-recieved", (msg) => delete messages[msg.id]);
+        }
+    }, [messages]);
 
     const handleEmojiPickerHideShow = ()=>{
         setShowEmojiPicker(!showEmojiPicker);
@@ -230,6 +265,9 @@ export default function MessageList({target, backTo, currentUser, socket}) {
     const output = (ones) => {
         if(ones.length > 0) {
             let last = ones[ones.length - 1];
+            if(!last) {
+                last = ones[ones.length - 2];
+            }
             return last.message ? last.message.text : ''
         }
     }
@@ -237,7 +275,13 @@ export default function MessageList({target, backTo, currentUser, socket}) {
     const goRemove = () => {
         const removeMessage = async () => {
             if (pMessage) {
-                const response = await axios.delete(removeMessageRoute + pMessage._id);
+                await axios.delete(removeMessageRoute + pMessage._id);
+                let msgs = messages.slice();
+                let index = 0;
+                msgs.map((msg, order)=> {
+                    if(msg._id == pMessage._id) index = order; 
+                })
+                socket.current.emit("remove-msg", { id: index, receiver: target._id});
                 fetchMessages();
             }
         }
@@ -418,7 +462,7 @@ export default function MessageList({target, backTo, currentUser, socket}) {
         </MDBRow>  
         { 
             clicked && (
-                pMessage._id == currentUser._id ?
+                pMessage.receiver == currentUser._id ?
                 <ContextMenu top={points.y} left={points.x}>
                     <ul>
                         <li onClick={goRecommend}><i className="fas fa-sign-language" style={{cursor: 'pointer'}}></i>&nbsp;&nbsp;&nbsp;Recommend</li>

@@ -137,7 +137,7 @@ const GlobalStyle = createGlobalStyle`
   }
   .slider-graphic-3 {
     animation: delay 4s;
-    background: url('/images/crazy-time.png') no-repeat 50%;
+    background: url('/images/dog-house.png') no-repeat 50%;
     height: 18.5625rem;
     right: 0rem;
     top: 0;

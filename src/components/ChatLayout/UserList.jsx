@@ -73,7 +73,7 @@ export default function UserList({users, showMessages, searchUsers}) {
                                 <MDBInputGroup className="rounded mb-3">
                                     <input
                                         className="form-control rounded"
-                                        type="text"
+                                        type="password"
                                         value={password} 
                                         onChange={(e)=>{e.preventDefault(); setPassword(e.target.value);}}
                                         onKeyDown={handleKeyDown}
@@ -113,7 +113,7 @@ export default function UserList({users, showMessages, searchUsers}) {
                             <MDBTypography listUnStyled className="mb-0">
                                 {
                                     users && users.map((user, index) => {
-                                        if(user.username) {
+                                        if(user && user.username) {
                                             return (
                                                 <li className="p-2 border-bottom" key={index} onClick={(e) => getMessages(e, user)}>
                                                 <a

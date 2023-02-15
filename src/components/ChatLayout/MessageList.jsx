@@ -16,7 +16,7 @@ import {BsEmojiSmileFill} from 'react-icons/bs'
 import useToast from 'hooks/useToast'
 // import { v4 as uuidv4} from "uuid";
 
-import { getAllMessagesRoute, sendMessageRoute, removeMessageRoute, recommendRoute, updateMessageRoute, host } from '../../utils/apiRoutes'
+import { getAllMessagesRoute, sendMessageRoute, removeMessageRoute, recommendRoute, updateMessageRoute, checkRoute, host } from '../../utils/apiRoutes'
 
 export default function MessageList({target, backTo, currentUser, socket}) {
 
@@ -29,11 +29,14 @@ export default function MessageList({target, backTo, currentUser, socket}) {
     const [bReply, toggleReply] = useState(false);
     const [pMessage, setPointMessage] = useState({});
     const [editable, setEditable] = useState(false);
+    const [show_alert, showAlert] = useState(false);
+    const [typing, setTypingStatus] = useState(false);
     const [points, setPoints] = useState({
         x: 0,
         y: 0,
     });
-    const { toastError } = useToast();
+    const { toastSuccess, toastError } = useToast();
+    const timeout=undefined;
 
     useEffect( () => {
         const fetchMessages = async () => {
@@ -51,24 +54,13 @@ export default function MessageList({target, backTo, currentUser, socket}) {
     useEffect(()=>{
         if(updatedMessage) {
             let msgs = messages.slice();
-            if(updatedMessage.recommend) {
-                let search = msgs.find(o => o._id == updatedMessage.id);
-                search.recommend = updatedMessage.recommend;
-                search.message = updatedMessage.message;
-                search.time = updatedMessage.time;
-            } else {
-                let index = 0;
-                let search = null;
-                msgs.map((msg, order)=> {
-                    if(msg._id == updatedMessage.id) index = order; search = msg
-                })
-                delete msgs[index];
-                search.recommend = updatedMessage.recommend;
-                search.message = updatedMessage.message;
-                search.time = updatedMessage.time;
-                msgs.push(search);
-                msgs.pop();
-            }
+            msgs.map((msg)=> {
+                if(msg._id == updatedMessage.id) {
+                    msg.recommend = updatedMessage.recommend;
+                    msg.message = updatedMessage.message;
+                    msg.time = updatedMessage.time;
+                }
+            })
             setMessages(msgs);   
         }
     },[updatedMessage]); 
@@ -111,11 +103,10 @@ export default function MessageList({target, backTo, currentUser, socket}) {
             const updateMessage = async () => {
                 if (pMessage) {
                     const response = await axios.post(updateMessageRoute + pMessage._id, {
-                        message: msg,
-                        time: Date.now(),
+                        message: msg
                     });
                     if(!response.data.status) {
-                        toastError('Error', 'Server is disconnected!');
+                        toastError('Server is disconnected!');
                         return;
                     }
                     socket.current.emit("update-msg", {
@@ -145,14 +136,15 @@ export default function MessageList({target, backTo, currentUser, socket}) {
                     sender: currentUser._id,
                     receiver: target._id,
                     message: msg,
-                    time: Date.now(),
+                    // time: Date.now(),
                     reply: pMessage
                 });
                 if(!response.data.status) {
-                    toastError('Error', 'Server is disconnected!');
+                    toastError('Server is disconnected!');
                     return;
                 }
                 socket.current.emit("send-msg", {
+                    _id: response.data._id,
                     sender: currentUser._id,
                     receiver: target._id,
                     message: { text: msg },
@@ -161,6 +153,7 @@ export default function MessageList({target, backTo, currentUser, socket}) {
                 });
                 const msgs = [...messages];
                 msgs.push({
+                    _id: response.data._id,
                     sender: currentUser._id,
                     receiver: target._id,
                     message: { text: msg },
@@ -174,14 +167,15 @@ export default function MessageList({target, backTo, currentUser, socket}) {
                     sender: currentUser._id,
                     receiver: target._id,
                     message: msg,
-                    time: Date.now(),
+                    // time: Date.now(),
                     reply: null
                 });
                 if(!response.data.status) {
-                    toastError('Error', 'Server is disconnected!');
+                    toastError('Server is disconnected!');
                     return;
                 }
                 socket.current.emit("send-msg", {
+                    _id: response.data._id,
                     sender: currentUser._id,
                     receiver: target._id,
                     message: { text: msg },
@@ -190,6 +184,7 @@ export default function MessageList({target, backTo, currentUser, socket}) {
                 });                
                 const msgs = [...messages];
                 msgs.push({
+                    _id: response.data._id,
                     sender: currentUser._id,
                     receiver: target._id,
                     message: { text: msg },
@@ -204,9 +199,16 @@ export default function MessageList({target, backTo, currentUser, socket}) {
 
     useEffect(() => {
         if (socket.current) {
-            socket.current.on("msg-recieved", (msg) => {setMessages([...messages, msg])});
+            socket.current.on("msg-recieved", (msg) => { axios.post(checkRoute + msg._id); setMessages([...messages, msg])});
             socket.current.on("update-msg-recieved", (msg) =>  setUpdateMessage(msg));
-            socket.current.on("remove-msg-recieved", (msg) => delete messages[msg.id]);
+            socket.current.on("remove-msg-recieved", (msg) => {messages.splice(msg.id, 1);});
+            socket.current.on("remove-all", (msg) => {setMessages([])});
+            socket.current.on('display', (msg)=>{
+                if(msg.typing==true)
+                    setTypingStatus(true)
+                else
+                    setTypingStatus(false);
+              })
         }
     }, [messages]);
 
@@ -221,15 +223,31 @@ export default function MessageList({target, backTo, currentUser, socket}) {
     }
 
     const handleKeyDown = (event) => {
-        if (event.key === 'Enter') {
+        if(event.which == 13){
             sendChat(event)
-        } 
-        if (event.key === 'Escape') {
+            clearTimeout(timeout)
+            typingTimeout() 
+        } else if(event.which == 27) {
             setMsg('');
             event.target.blur();
-            scrollRef.current?.scrollIntoView({ behavior: "smooth" });
-        } 
+            scrollRef.current?.scrollIntoView({ behavior: "smooth" });  
+            clearTimeout(timeout)
+            typingTimeout() 
+        } else {
+            socket.current.emit('typing', { receiver: target._id, name:currentUser.username, typing:true })
+            clearTimeout(timeout)
+            timeout=setTimeout(typingTimeout, 3000)
+        }
     };
+
+    const typingTimeout = () => {
+        socket.current.emit('typing', { receiver: target._id, name:currentUser.username, typing:false})
+    }
+
+    const deleteAllMessages = (e) => {
+        e.preventDefault();
+        showAlert(!show_alert);
+    }
 
     const sendChat = (e)=>{
         e.preventDefault();
@@ -241,6 +259,24 @@ export default function MessageList({target, backTo, currentUser, socket}) {
             toggleReply(false);
             setEditable(false);
         }
+    }
+
+    const deleteAll = async (e) => {
+        e.preventDefault()
+        const res = await axios.delete(removeMessageRoute + 'all');
+        if(res.data.status) {
+            toastSuccess('All Messages successfully removed');
+            showAlert(false);
+            setMessages([]);
+            socket.current.emit("remove-all", { receiver: target._id});
+        } else {
+            toastError('Server is disconnected!');
+        }
+    }
+
+    const cancelDelete = (e) => {
+        e.preventDefault();
+        showAlert(false);
     }
 
     const goRecommend = () => {
@@ -428,24 +464,44 @@ export default function MessageList({target, backTo, currentUser, socket}) {
                         }         
                     </MDBCardBody>
                     { showEmojiPicker && <EmojiPicker onEmojiClick={handleEmojiClick} width="100%"/> }
+                    { show_alert && <div className='d-flex p-2' style={{border: '1px solid red', margin: '0px 10px'}}>
+                        <span style={{margin: '0px 15px', color: 'red'}}>Really delete?</span>
+                        <span className='d-flex'>
+                            <button className="btn btn-danger rounded-3 me-2" style={{padding : '3px 15px'}} onClick={(e)=>deleteAll(e)}>Yes</button>
+                            <button className="btn btn-warning rounded-3" style={{padding : '3px 15px'}} onClick={(e)=>cancelDelete(e)}>No</button>
+                        </span>
+                    </div> }
+                    {
+                        typing ? <img
+                            src="/images/typing2.gif"
+                            alt="typing"
+                            style={{ width: "70px", height: "auto", marginBottom: "-30px", marginLeft: '120px'}}
+                        />
+                        : <img
+                            src="/images/typing1.png"
+                            alt="typing"
+                            style={{ width: "70px", height: "auto", marginBottom: "-30px", marginLeft: '120px'}}
+                        />
+                    }
                     <div className="d-flex" style={{ justifyContent:"space-between", margin:"15px"}}>
                     { bReply&& 
                         <p 
                             className="small italic" 
-                            style={{ maxWidth: '75%', fontSize: '17px', borderBottom: 'solid 1px', paddingBottom: '8px' }}
+                            style={{ maxWidth: '60%', fontSize: '17px', borderBottom: 'solid 1px', paddingBottom: '8px' }}
                         >
                             {pMessage.message.text}
                         </p>
                     }
-                        <span className="d-flex" style={{width: '25%'}}>
-                            <a className="ms-3 text-muted" href="#!">
-                                <div className="emoji" >
-                                    <BsEmojiSmileFill onClick={handleEmojiPickerHideShow}/>
-                                </div>
-                            </a>
-                            <a className="ms-3 link-info" href="#!" onClick={(e)=>sendChat(e)}>
+                        <span className="" style={{width: '40%'}}>
+                            <span className="ms-3 link-info" onClick={(e)=>deleteAllMessages(e)}>
+                                <MDBIcon fas icon="trash" />
+                            </span>
+                            <span className="ms-3 link-info">
+                                <BsEmojiSmileFill onClick={handleEmojiPickerHideShow} className="emoji"/>
+                            </span>
+                            <span className="ms-3 link-info" onClick={(e)=>sendChat(e)}>
                                 <MDBIcon fas icon="paper-plane" />
-                            </a>
+                            </span>
                         </span>
                     </div>
                     <MDBCardFooter className="text-muted d-flex justify-content-start align-items-center p-2">
@@ -473,7 +529,7 @@ export default function MessageList({target, backTo, currentUser, socket}) {
                 :<ContextMenu top={points.y} left={points.x}>
                 <ul>
                     <li onClick={goEdit}><i className="fas fa-edit" style={{cursor: 'pointer'}}></i>&nbsp;&nbsp;&nbsp;Edit</li>
-                    <li onClick={goReply}><i className="fas fa-reply" style={{cursor: 'pointer'}}></i>&nbsp;&nbsp;&nbsp;Forward</li>
+                    <li onClick={goReply}><i className="fas fa-reply" style={{cursor: 'pointer'}}></i>&nbsp;&nbsp;&nbsp;Reply</li>
                     <li onClick={goRemove}><i className="fas fa-trash-alt" style={{cursor: 'pointer'}}></i>&nbsp;&nbsp;&nbsp;Remove</li>
                 </ul>
             </ContextMenu>

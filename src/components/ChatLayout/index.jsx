@@ -64,7 +64,7 @@ export default function ChatComponent() {
       }
     }
     fetchUsers();
-  }, [currentUser]);
+  }, [currentUser, showShow]);
  
   const toggleShow = () => setShowShow(!showShow);
   const showMessages = (user) => {

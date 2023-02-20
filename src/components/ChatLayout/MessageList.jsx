@@ -8,20 +8,28 @@ import {
     MDBIcon,
     MDBCardFooter
 } from "mdb-react-ui-kit";
-
+import Dropzone from 'react-dropzone'
 import styled, { css } from 'styled-components'
 import axios from "axios";
+import { isNil } from "lodash";
 import EmojiPicker from 'emoji-picker-react'
 import {BsEmojiSmileFill} from 'react-icons/bs'
 import useToast from 'hooks/useToast'
-// import { v4 as uuidv4} from "uuid";
 
-import { getAllMessagesRoute, sendMessageRoute, removeMessageRoute, recommendRoute, updateMessageRoute, checkRoute, host } from '../../utils/apiRoutes'
+import {
+    FilePreviewContainer,
+    ImagePreview,
+    PreviewContainer,
+    PreviewList,
+    FileMetaData,
+    RemoveFileIcon
+  } from "./file-upload.styles";
+
+import { getAllMessagesRoute, sendMessageRoute, removeMessageRoute, recommendRoute, updateMessageRoute, checkRoute, sendFileRoute, host } from '../../utils/apiRoutes'
 
 export default function MessageList({target, backTo, currentUser, socket}) {
 
     const scrollRef = useRef();
-    const [updatedMessage, setUpdateMessage] = useState(null);
     const [messages, setMessages] = useState([]);
     const [clicked, setClicked] = useState(false);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -31,39 +39,18 @@ export default function MessageList({target, backTo, currentUser, socket}) {
     const [editable, setEditable] = useState(false);
     const [show_alert, showAlert] = useState(false);
     const [typing, setTypingStatus] = useState(false);
+    const [files, setFilesForUpload] = useState([]);
     const [points, setPoints] = useState({
         x: 0,
         y: 0,
     });
     const { toastSuccess, toastError } = useToast();
-    const timeout=undefined;
+    const timeout = undefined;
+    const KILO_BYTES_PER_BYTE = 1000;
 
     useEffect( () => {
-        const fetchMessages = async () => {
-            if (currentUser) {
-                const response = await axios.post(getAllMessagesRoute, {
-                  sender: target._id,
-                  receiver: currentUser._id
-                });
-                setMessages( response.data);
-            }
-        }
         fetchMessages()
     }, [currentUser])
-    
-    useEffect(()=>{
-        if(updatedMessage) {
-            let msgs = messages.slice();
-            msgs.map((msg)=> {
-                if(msg._id == updatedMessage.id) {
-                    msg.recommend = updatedMessage.recommend;
-                    msg.message = updatedMessage.message;
-                    msg.time = updatedMessage.time;
-                }
-            })
-            setMessages(msgs);   
-        }
-    },[updatedMessage]); 
       
     useEffect(() => {
         scrollRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -77,28 +64,65 @@ export default function MessageList({target, backTo, currentUser, socket}) {
         };
     }, []);
 
+    const convertBytesToKB = (bytes) => Math.round(bytes / KILO_BYTES_PER_BYTE);
+
+    const fetchMessages = async () => {
+        if (currentUser) {
+            const res = await axios.post(getAllMessagesRoute, {
+              sender: target._id,
+              receiver: currentUser._id
+            });
+            setMessages( res.data);
+        }
+    }
+
     const handleRecommendMsg = async () => {
         const recommendMessage = async () => {
             if (pMessage) {
                 await axios.post(recommendRoute + pMessage._id);
                 socket.current.emit("update-msg", {
-                    id: pMessage._id,
                     receiver: target._id,
-                    message: pMessage.message,
-                    time: pMessage.time,
-                    recommend: true
+                    sender: currentUser._id,
                 });
             }
         }
-        recommendMessage()
-      
-        let msgs = messages.slice();
-        let search = msgs.find(o => o._id == pMessage._id);
-        search.recommend = true;
-        setMessages(msgs);      
+        recommendMessage();
+        fetchMessages();      
     }
 
-    const handleSendMsg = async (msg) => {
+    const handleSendFiles = async() => {
+        const response = await axios.post(sendMessageRoute, {
+            sender: currentUser._id,
+            receiver: target._id,
+            message: msg,
+        });
+        if(response.data.status) {
+            let id = response.data._id;
+            files.map(async(file) => {
+                const formData = new FormData();
+                formData.append("myFile", file);
+                formData.append("id", id);
+                await axios.post(sendFileRoute, formData, {
+                    headers: {
+                        "content-type": "multipart/form-data",
+                    },
+                });
+            })            
+            const timer = setTimeout(() => {
+                socket.current.emit("send-img", {
+                    sender: currentUser._id,
+                    receiver: target._id,
+                });  
+                fetchMessages()
+            }, 1000);
+            return () => clearTimeout(timer);
+        } else {
+            toastError('Server is disconnected!');
+            return;
+        }        
+    }
+
+    const handleSendMsg = async() => {
         if(editable) {
             const updateMessage = async () => {
                 if (pMessage) {
@@ -110,33 +134,19 @@ export default function MessageList({target, backTo, currentUser, socket}) {
                         return;
                     }
                     socket.current.emit("update-msg", {
-                        id: pMessage._id,
                         receiver: target._id,
-                        message: { text: msg },
-                        time: Date.now(),
-                        recommend: false
+                        sender: currentUser._id
                     });                    
                     fetchMessages();
                 }
             }
-            updateMessage()
-    
-            const fetchMessages = async () => {
-                if (currentUser) {
-                    const response = await axios.post(getAllMessagesRoute, {
-                      sender: target._id,
-                      receiver: currentUser._id
-                    });
-                    setMessages( response.data);
-                }
-            }               
+            updateMessage()              
         } else {
             if(bReply) {
                 const response = await axios.post(sendMessageRoute, {
                     sender: currentUser._id,
                     receiver: target._id,
                     message: msg,
-                    // time: Date.now(),
                     reply: pMessage
                 });
                 if(!response.data.status) {
@@ -147,21 +157,8 @@ export default function MessageList({target, backTo, currentUser, socket}) {
                     _id: response.data._id,
                     sender: currentUser._id,
                     receiver: target._id,
-                    message: { text: msg },
-                    time: Date.now(),
-                    reply: pMessage
                 });
-                const msgs = [...messages];
-                msgs.push({
-                    _id: response.data._id,
-                    sender: currentUser._id,
-                    receiver: target._id,
-                    message: { text: msg },
-                    recommend: false,
-                    time: Date.now(),
-                    reply: pMessage
-                });
-                setMessages(msgs);
+                fetchMessages();
             } else {
                 const response = await axios.post(sendMessageRoute, {
                     sender: currentUser._id,
@@ -177,38 +174,50 @@ export default function MessageList({target, backTo, currentUser, socket}) {
                 socket.current.emit("send-msg", {
                     _id: response.data._id,
                     sender: currentUser._id,
-                    receiver: target._id,
-                    message: { text: msg },
-                    time: Date.now(),
-                    reply: null
+                    receiver: target._id
                 });                
-                const msgs = [...messages];
-                msgs.push({
-                    _id: response.data._id,
-                    sender: currentUser._id,
-                    receiver: target._id,
-                    message: { text: msg },
-                    recommend: false,
-                    time: Date.now(),
-                    reply: null
-                });
-                setMessages(msgs);
+                fetchMessages()
             }
         }        
     };
 
+    async function downloadFileFromUrl(url) { 
+        await fetch(url)
+        .then((response) => response.blob())
+        .then((blob) => {
+            const file = new File([blob], {type: blob.type});
+            var a = document.createElement("a"),
+            url = URL.createObjectURL(file);
+            a.href = url;
+            a.download = "upload-id" + (Math.floor(Math.random() * 100) + 1) + ".jpg";
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(function() {
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);  
+            }, 0); 
+        })
+        .catch(console.error);
+    }
+
     useEffect(() => {
         if (socket.current) {
-            socket.current.on("msg-recieved", (msg) => { axios.post(checkRoute + msg._id); setMessages([...messages, msg])});
-            socket.current.on("update-msg-recieved", (msg) =>  setUpdateMessage(msg));
-            socket.current.on("remove-msg-recieved", (msg) => {messages.splice(msg.id, 1);});
-            socket.current.on("remove-all", (msg) => {setMessages([])});
-            socket.current.on('display', (msg)=>{
+            socket.current.on("msg-recieved", (msg) => { if(msg.sender != target._id) { return }; axios.post(checkRoute + msg._id); fetchMessages()});
+            socket.current.on("update-msg-recieved", (msg) => { if(msg.sender != target._id) { return }; fetchMessages()});
+            socket.current.on("remove-msg-recieved", (msg) => { if(msg.sender != target._id) { return }; fetchMessages()});
+            socket.current.on("remove-all", (msg) => { if(msg.sender != target._id) { return }; fetchMessages()});
+            socket.current.on('display', (msg)=>{                   
+                if(msg.name != target.username) { return };             
                 if(msg.typing==true)
-                    setTypingStatus(true)
+                    setTypingStatus(true);
                 else
                     setTypingStatus(false);
-              })
+            })
+            socket.current.on('image', (msg) => {
+                if(msg.sender != target._id) { return };   
+                fetchMessages();
+            })
+
         }
     }, [messages]);
 
@@ -253,11 +262,17 @@ export default function MessageList({target, backTo, currentUser, socket}) {
         e.preventDefault();
         if(showEmojiPicker)
             setShowEmojiPicker(!showEmojiPicker);
-        if(msg != ''){
-            handleSendMsg(msg);
+        if(files.length > 0){
+            handleSendFiles();
+            setFilesForUpload([]);
             setMsg('');
-            toggleReply(false);
-            setEditable(false);
+        } else {
+            if(msg != ''){
+                handleSendMsg();
+                setMsg('');
+                toggleReply(false);
+                setEditable(false);
+            }
         }
     }
 
@@ -268,7 +283,7 @@ export default function MessageList({target, backTo, currentUser, socket}) {
             toastSuccess('All Messages successfully removed');
             showAlert(false);
             setMessages([]);
-            socket.current.emit("remove-all", { receiver: target._id});
+            socket.current.emit("remove-all", { receiver: target._id, sender: currentUser._id});
         } else {
             toastError('Server is disconnected!');
         }
@@ -317,25 +332,17 @@ export default function MessageList({target, backTo, currentUser, socket}) {
                 msgs.map((msg, order)=> {
                     if(msg._id == pMessage._id) index = order; 
                 })
-                socket.current.emit("remove-msg", { id: index, receiver: target._id});
+                socket.current.emit("remove-msg", { id: index, receiver: target._id, sender: currentUser._id });
                 fetchMessages();
             }
         }
-        removeMessage()
-
-        const fetchMessages = async () => {
-            if (currentUser) {
-                const response = await axios.post(getAllMessagesRoute, {
-                  sender: target._id,
-                  receiver: currentUser._id
-                });
-                setMessages( response.data);
-            }
-        }        
+        removeMessage()      
     }
 
     const timeFormat = (time) => {
-        var date = new Date(time);
+        var now = new Date();
+        var offset =  now.getTimezoneOffset();
+        var date = new Date(time + offset*60*1000);
         var hours = date.getHours();
         var minutes = "0" + date.getMinutes();
         var formattedTime = hours + ':' + minutes.substr(-2);
@@ -347,6 +354,25 @@ export default function MessageList({target, backTo, currentUser, socket}) {
         d.setHours(0,0,0);
         var Difference_In_Days = (d.getTime() - time) / (1000 * 3600 * 24);
         return Math.floor(Difference_In_Days) < 0 ? 'today' : Math.floor(Difference_In_Days) + 1 + ' days ago'
+    }
+
+    const onDropFiles = (acceptedFiles) => {
+        const uploaded = acceptedFiles.map((file) =>
+            Object.assign(file, {
+                preview: URL.createObjectURL(file)
+            })
+        );
+        setFilesForUpload(
+          files ? [...files, ...uploaded] : [...uploaded]
+        );
+    };
+
+    function removeFile(itemIndex) {
+        if (!isNil(itemIndex)) {
+          const uploaded = [...files];
+          uploaded.splice(itemIndex, 1);
+          setFilesForUpload([...uploaded]);
+        }
     }
 
     return (
@@ -373,96 +399,167 @@ export default function MessageList({target, backTo, currentUser, socket}) {
                     </div>
                 </MDBCard>
                 <MDBCard id="chat4">
-                    <MDBCardBody>                        
-                        {   
-                            messages.length > 0 && messages.map((message, index) => {
-                                if(message.receiver == target._id) {
-                                    return (                                        
-                                        <div className="d-flex flex-row justify-content-end mb-4 pt-1" 
-                                            ref={scrollRef} key={'message' + index}                                           
-                                        >
-                                            <div>
-                                                <div 
-                                                    className="small p-2 me-3 mb-1 text-white rounded-3 bg-info" 
-                                                    style={{ maxWidth: '205px' }}
-                                                    onContextMenu={(e) => {
-                                                        e.preventDefault(); 
-                                                        setClicked(true);
-                                                        const rect = e.target.getBoundingClientRect();
-                                                        setPoints({
-                                                            x: e.pageX - rect.left,
-                                                            y: e.pageY - pageYOffset,
-                                                        });
-                                                        setPointMessage(message);
-                                                    }}
-                                                >
-                                                    { message.reply&& 
-                                                        <p 
-                                                            className="small me-3 italic" 
-                                                            style={{ maxWidth: '100%', fontSize: '17px', borderBottom: 'solid 1px', paddingBottom: '8px' }}
-                                                        >
-                                                            {message.reply.message.text}&nbsp;&nbsp;<span style={{fontSize: '14px'}}>{timeFormat(message.reply.time)}</span>
-                                                        </p>
+                    <Dropzone onDrop={onDropFiles}>
+                        {({getRootProps, getInputProps}) => (
+                        <MDBCardBody {...getRootProps()}>         
+                        <input {...getInputProps()} />               
+                            {   
+                                messages.length > 0 && messages.map((message, index) => {
+                                    if(message.receiver == target._id) {
+                                        return (                                        
+                                            <div className="d-flex flex-row justify-content-end mb-4 pt-1" 
+                                                ref={scrollRef} key={'message' + index}                                           
+                                            >
+                                                <div>
+                                                    { 
+                                                        message.file.length > 0 && 
+                                                        <FilePreviewContainer>
+                                                            <PreviewList>
+                                                            {message.file.map((file, index) => {
+                                                                return (
+                                                                <PreviewContainer key={file.name}>
+                                                                    <div>
+                                                                    {file.type && (
+                                                                        <ImagePreview
+                                                                            src={`${host}/uploads/${file.name}`}
+                                                                            alt={`file preview ${index}`}
+                                                                        />
+                                                                    )}
+                                                                    <FileMetaData isImageFile={file.type}>
+                                                                        <span>{file.name}</span>
+                                                                        <aside>
+                                                                        <RemoveFileIcon
+                                                                            className="fas fa-trash-alt"
+                                                                            // onClick={() => {removeFile(index)}}
+                                                                        />
+                                                                        </aside>
+                                                                    </FileMetaData>
+                                                                    </div>
+                                                                </PreviewContainer>
+                                                                );
+                                                            })}
+                                                            </PreviewList>
+                                                        </FilePreviewContainer>
                                                     }
-                                                    <p style={{ marginTop: '10px' }}>{message.message.text}</p>
-                                                    { message.recommend&& <p>👍</p> }
-                                                </div>
-                                                <p className="small me-3 mb-3 rounded-3 text-muted d-flex justify-content-end">
-                                                    {timeFormat(message.time)}&nbsp;&nbsp;{diffTime(message.time)}
-                                                </p>
-                                            </div>
-                                            <img
-                                                src="/images/user1.png"
-                                                alt="avatar 1"
-                                                style={{ width: "40px", height: "40px" }}
-                                            />
-                                        </div>
-                                    )
-                                } else {
-                                    return (
-                                        <div className="d-flex flex-row justify-content-start" ref={scrollRef} key={index}>
-                                            <img
-                                                src="/images/user2.png"
-                                                alt="avatar 1"
-                                                style={{ width: "45px", height: "45px" }}
-                                            />
-                                            <div>
-                                                <div 
-                                                    className="small p-2 ms-3 mb-1 rounded-3"
-                                                    style={{ backgroundColor: "#f5f6f7", maxWidth: '205px' }}
-                                                    onContextMenu={(e) => {
-                                                        e.preventDefault(); 
-                                                        setClicked(true);
-                                                        const rect = e.target.getBoundingClientRect();
-                                                        setPoints({
-                                                            x: e.pageX - rect.left,
-                                                            y: e.pageY - pageYOffset,
-                                                        });
-                                                        setPointMessage(message);
-                                                    }}
-                                                >
-                                                    { message.reply&& 
-                                                        <p 
-                                                            className="small me-3 italic" 
-                                                            style={{ maxWidth: '100%', fontSize: '17px', borderBottom: 'solid 1px', paddingBottom: '8px' }}
+                                                    {
+                                                        message.message.text != '' && 
+                                                        <div 
+                                                            className="small p-2 me-3 mb-1 text-white rounded-3 bg-info" 
+                                                            style={{ maxWidth: '205px' }}
+                                                            onContextMenu={(e) => {
+                                                                e.preventDefault(); 
+                                                                setClicked(true);
+                                                                const rect = e.target.getBoundingClientRect();
+                                                                setPoints({
+                                                                    x: e.pageX - rect.left,
+                                                                    y: e.pageY - pageYOffset,
+                                                                });
+                                                                setPointMessage(message);
+                                                            }}
                                                         >
-                                                            {message.reply.message.text}&nbsp;&nbsp;<span style={{fontSize: '14px'}}>{timeFormat(message.reply.time)}</span>
-                                                        </p>
-                                                    }
-                                                    <p style={{ marginTop: '10px' }}>{message.message? message.message.text : ''}</p>
-                                                    { message.recommend&& <p>👍</p> }
+                                                            { message.reply&& 
+                                                                <p 
+                                                                    className="small me-3 italic" 
+                                                                    style={{ maxWidth: '100%', fontSize: '17px', borderBottom: 'solid 1px', paddingBottom: '8px' }}
+                                                                >
+                                                                    {message.reply.message.text}&nbsp;&nbsp;<span style={{fontSize: '14px'}}>{timeFormat(message.reply.time)}</span>
+                                                                </p>
+                                                            }
+                                                            <p style={{ marginTop: '10px' }}>{message.message.text}</p>
+                                                            { message.recommend&& <p>👍</p> }
+                                                        </div>
+                                                    }                                                
+                                                    <p className="small me-3 mb-3 rounded-3 text-muted d-flex justify-content-end">
+                                                        {timeFormat(message.time)}&nbsp;&nbsp;{diffTime(message.time)}
+                                                    </p>
                                                 </div>
-                                                <p className="small ms-3 mb-3 rounded-3 text-muted">
-                                                    {timeFormat(message.time)}&nbsp;&nbsp;{diffTime(message.time)}
-                                                </p>
+                                                <img
+                                                    src="/images/user1.png"
+                                                    alt="avatar 1"
+                                                    style={{ width: "40px", height: "40px" }}
+                                                />
                                             </div>
-                                        </div>
-                                    )
-                                }
+                                        )
+                                    } else {
+                                        return (
+                                            <div className="d-flex flex-row justify-content-start" ref={scrollRef} key={index}>
+                                                <img
+                                                    src="/images/user2.png"
+                                                    alt="avatar 1"
+                                                    style={{ width: "45px", height: "45px" }}
+                                                />
+                                                <div>
+                                                    { 
+                                                        message.file.length > 0 && 
+                                                        <FilePreviewContainer>
+                                                            <PreviewList>
+                                                            {message.file.map((file, index) => {
+                                                                return (
+                                                                <PreviewContainer key={file.name}>
+                                                                    <div>
+                                                                    {file.type && (
+                                                                        <ImagePreview
+                                                                            src={`${host}/uploads/${file.name}`}
+                                                                            alt={`file preview ${index}`}
+                                                                        />
+                                                                    )}
+                                                                    <FileMetaData isImageFile={file.type}>
+                                                                        <span>{file.name}</span>
+                                                                        <aside>
+                                                                        <RemoveFileIcon
+                                                                            className="fas fa-trash-alt"
+                                                                            // onClick={() => {removeFile(index)}}
+                                                                        />
+                                                                        </aside>
+                                                                    </FileMetaData>
+                                                                    </div>
+                                                                </PreviewContainer>
+                                                                );
+                                                            })}
+                                                            </PreviewList>
+                                                        </FilePreviewContainer>
+                                                    }
+                                                    {
+                                                        message.message.text != '' && 
+                                                        <div 
+                                                            className="small p-2 ms-3 mb-1 rounded-3"
+                                                            style={{ backgroundColor: "#f5f6f7", maxWidth: '205px' }}
+                                                            onContextMenu={(e) => {
+                                                                e.preventDefault(); 
+                                                                setClicked(true);
+                                                                const rect = e.target.getBoundingClientRect();
+                                                                setPoints({
+                                                                    x: e.pageX - rect.left,
+                                                                    y: e.pageY - pageYOffset,
+                                                                });
+                                                                setPointMessage(message);
+                                                            }}
+                                                        >
+                                                            { message.reply&& 
+                                                                <p 
+                                                                    className="small me-3 italic" 
+                                                                    style={{ maxWidth: '100%', fontSize: '17px', borderBottom: 'solid 1px', paddingBottom: '8px' }}
+                                                                >
+                                                                    {message.reply.message.text}&nbsp;&nbsp;<span style={{fontSize: '14px'}}>{timeFormat(message.reply.time)}</span>
+                                                                </p>
+                                                            }
+                                                            <p style={{ marginTop: '10px' }}>{message.message? message.message.text : ''}</p>
+                                                            { message.recommend&& <p>👍</p> }
+                                                        </div>
+                                                    }
+                                                    <p className="small ms-3 mb-3 rounded-3 text-muted">
+                                                        {timeFormat(message.time)}&nbsp;&nbsp;{diffTime(message.time)}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )
+                                    }
 
-                            })
-                        }         
-                    </MDBCardBody>
+                                })
+                            }         
+                        </MDBCardBody>
+                        )}
+                    </Dropzone>                    
                     { showEmojiPicker && <EmojiPicker onEmojiClick={handleEmojiClick} width="100%"/> }
                     { show_alert && <div className='d-flex p-2' style={{border: '1px solid red', margin: '0px 10px'}}>
                         <span style={{margin: '0px 15px', color: 'red'}}>Really delete?</span>
@@ -475,12 +572,12 @@ export default function MessageList({target, backTo, currentUser, socket}) {
                         typing ? <img
                             src="/images/typing2.gif"
                             alt="typing"
-                            style={{ width: "70px", height: "auto", marginBottom: "-30px", marginLeft: '120px'}}
+                            style={{ width: "64px", height: "auto", marginBottom: "-30px", marginLeft: '120px'}}
                         />
                         : <img
                             src="/images/typing1.png"
                             alt="typing"
-                            style={{ width: "70px", height: "auto", marginBottom: "-30px", marginLeft: '120px'}}
+                            style={{ width: "64px", height: "auto", marginBottom: "-30px", marginLeft: '120px'}}
                         />
                     }
                     <div className="d-flex" style={{ justifyContent:"space-between", margin:"15px"}}>
@@ -493,18 +590,48 @@ export default function MessageList({target, backTo, currentUser, socket}) {
                         </p>
                     }
                         <span className="" style={{width: '40%'}}>
-                            <span className="ms-3 link-info" onClick={(e)=>deleteAllMessages(e)}>
+                            <span className="ms-3 link-info" style={{cursor: 'pointer'}} onClick={(e)=>deleteAllMessages(e)}>
                                 <MDBIcon fas icon="trash" />
                             </span>
-                            <span className="ms-3 link-info">
+                            <span className="ms-3 link-info" style={{cursor: 'pointer'}}>
                                 <BsEmojiSmileFill onClick={handleEmojiPickerHideShow} className="emoji"/>
                             </span>
-                            <span className="ms-3 link-info" onClick={(e)=>sendChat(e)}>
+                            <span className="ms-3 link-info" style={{cursor: 'pointer'}} onClick={(e)=>sendChat(e)}>
                                 <MDBIcon fas icon="paper-plane" />
                             </span>
                         </span>
                     </div>
-                    <MDBCardFooter className="text-muted d-flex justify-content-start align-items-center p-2">
+                    <MDBCardFooter className="text-muted p-2">
+                        <FilePreviewContainer>
+                            <PreviewList>
+                            {Object.keys(files).map((fileName, index) => {
+                                let file = files[fileName];
+                                let isImageFile = file.type.split("/")[0] === "image";
+                                return (
+                                <PreviewContainer key={fileName}>
+                                    <div>
+                                    {isImageFile && (
+                                        <ImagePreview
+                                            src={URL.createObjectURL(file)}
+                                            alt={`file preview ${index}`}
+                                        />
+                                    )}
+                                    <FileMetaData isImageFile={isImageFile}>
+                                        <span>{file.name}</span>
+                                        <aside>
+                                        <span>{convertBytesToKB(file.size)} kb</span>
+                                        <RemoveFileIcon
+                                            className="fas fa-trash-alt"
+                                            onClick={() => {removeFile(index)}}
+                                        />
+                                        </aside>
+                                    </FileMetaData>
+                                    </div>
+                                </PreviewContainer>
+                                );
+                            })}
+                            </PreviewList>
+                        </FilePreviewContainer>
                         <textarea
                             className="form-control form-control-lg"
                             value={msg} onChange={(e)=>{setMsg(e.target.value)}}

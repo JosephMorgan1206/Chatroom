@@ -9,12 +9,13 @@ import useGetTokenBalance from 'hooks/useTokenBalance';
 import { getBalanceAmount } from 'utils/formatBalance';
 import { useWeb3React } from '../../../packages/wagmi/src/useWeb3React';
 import { connect, host, allUsersRoute, search } from '../../utils/apiRoutes'
+import useToast from 'hooks/useToast'
 
 import 'mdb-react-ui-kit/dist/css/mdb.min.css';
 import "@fortawesome/fontawesome-free/css/all.min.css";
 
-import MessageList from './MessageList'
 import UserList from './UserList'
+import MessageList from './MessageList'
 
 export default function ChatComponent() {
 
@@ -27,7 +28,9 @@ export default function ChatComponent() {
   const [showShow, setShowShow] = useState(false);
   const [users, setUsers] = useState([]);
   const [target, setTarget] = useState({});
-  const [currentUser, setCurrentUser] = useState("")
+  const [currentUser, setCurrentUser] = useState("");
+  const [login, setLogin] = useState(false);
+  const { toastSuccess } = useToast();
 
   useEffect( () => {
     const connectUser = async() => {
@@ -50,7 +53,7 @@ export default function ChatComponent() {
   useEffect(() => 
       {
         if(socket.current) {
-          socket.current.on("add-user-recieved", (one) => setUsers([...users, one]))
+          socket.current.on("add-user-recieved", (one) => console.log("dddddddddddddddddddd", one))
         }
       },
       [socket.current, users]
@@ -67,6 +70,12 @@ export default function ChatComponent() {
   }, [currentUser, showShow]);
  
   const toggleShow = () => setShowShow(!showShow);
+  const logout = () => {
+    localStorage.clear();
+    setLogin(false);
+    toastSuccess('You are logout now');
+  }
+
   const showMessages = (user) => {
     setEnableMsg(true);
     setTarget(user);
@@ -88,6 +97,9 @@ export default function ChatComponent() {
       <MDBBtn onClick={toggleShow} color="info" size="lg" block>
         <div className="d-flex justify-content-between align-items-center">
           <span><i className='fas fa-comments-dollar'></i>&nbsp;&nbsp;Chat with Clients</span>
+          {
+            login && <span onClick={logout}><i className='fas fa-undo'></i></span>
+          }          
         </div>
       </MDBBtn>
       <MDBCollapse show={showShow} className="mt-3" style={{height: 'auto'}}>

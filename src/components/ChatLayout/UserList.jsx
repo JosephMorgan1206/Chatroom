@@ -1,5 +1,5 @@
 /* eslint-disable */
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   MDBRow,
   MDBCol,
@@ -14,17 +14,22 @@ import axios from "axios";
 import { login } from '../../utils/apiRoutes'
 import useToast from 'hooks/useToast'
 
-export default function UserList({users, showMessages, searchUsers}) {
+export default function UserList({users, showMessages, searchUsers, setLogin}) {
     const [keyword, setKeyword] = useState("");
     const [password, setPassword] = useState("");
     const [show_login, showLogin] = useState(false);
-    const [target, selectTarget] = useState("");
-    const { toastError } = useToast();
+    const { toastSuccess, toastError } = useToast();
+
+    useEffect(() => {
+        if(!localStorage.getItem('chat-app-user')) {
+            showLogin(true);
+        }
+    }, );
 
     const getMessages = (e, user)=>{
         e.preventDefault();
         showLogin(true);
-        selectTarget(user);
+        showMessages(user);
     };
 
     const handleKeyDown = (event) => {
@@ -37,6 +42,10 @@ export default function UserList({users, showMessages, searchUsers}) {
         }
     };
 
+    const convertAddress = (address) => {
+        return '0x'+address.slice(2, 6)+'....'+address.slice(-4)
+    }
+
     const loginAction = () => {
         const loginServer = async () => {
             if (password) {
@@ -44,8 +53,10 @@ export default function UserList({users, showMessages, searchUsers}) {
                   password: password
                 });
                 if(response.data.status) {
-                    showMessages(target);
+                    toastSuccess('You are logined now');
                     showLogin(false);
+                    setLogin(true);
+                    localStorage.setItem('chat-app-user', true);
                     setKeyword("");
                     setPassword("");
                 } else {
@@ -67,91 +78,91 @@ export default function UserList({users, showMessages, searchUsers}) {
                     <MDBCardBody className="p-3">
                     <MDBRow>
                         <MDBCol className="mb-4 mb-md-0">
-                        <div className="p-1">
                             {
                                 show_login ?
-                                <MDBInputGroup className="rounded mb-3">
-                                    <input
-                                        className="form-control rounded"
-                                        type="password"
-                                        value={password} 
-                                        onChange={(e)=>{e.preventDefault(); setPassword(e.target.value);}}
-                                        onKeyDown={handleKeyDown}
-                                        placeholder="Please input the Password"
-                                        style={{borderColor: 'red'}}
-                                        autoFocus 
-                                    />
-                                    <button
-                                        className="input-group-text rounded"
-                                        style={{marginLeft: "10px", background: "red", color: "white"}}
-                                        id="login-addon"
-                                        onClick={loginAction}
-                                    >
-                                        login
-                                    </button>
-                                </MDBInputGroup>
-                                : <MDBInputGroup className="rounded mb-3">
-                                    <input
-                                        type="text"
-                                        className="form-control rounded"
-                                        value={keyword} 
-                                        onChange={(e)=>{e.preventDefault(); setKeyword(e.target.value);}}
-                                        onKeyDown={handleKeyDown}
-                                        placeholder="Search"
-                                        autoFocus 
-                                    />
-                                    <span
-                                        className="input-group-text border-0"
-                                        id="search-addon"
-                                    >
-                                        <MDBIcon fas icon="search" />
-                                    </span>
-                                </MDBInputGroup>        
-
-                            }                                              
-
-                            <MDBTypography listUnStyled className="mb-0">
-                                {
-                                    users && users.map((user, index) => {
-                                        if(user && user.username) {
-                                            return (
-                                                <li className="p-2 border-bottom" key={index} onClick={(e) => getMessages(e, user)}>
-                                                <a
-                                                    href="#"
-                                                    className="d-flex justify-content-between user-item"
-                                                >
-                                                    <div className="d-flex flex-row col-md-10">
-                                                        <div className="col-md-2">
-                                                            <img
-                                                            src="/images/user2.png"
-                                                            alt="avatar"
-                                                            className="d-flex align-self-center me-3"
-                                                            width="60"
-                                                            height="60"
-                                                            />
-                                                            <span className="badge bg-success badge-dot"></span>
-                                                        </div>
-                                                        <div className="pt-1 col-md-10">
-                                                            <p className="fw-bold mb-0 ellipsis">{user.username}</p>
-                                                            <p className="small text-muted ellipsis">
-                                                            Hello, How are you?
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="pt-1 col-md-2">
-                                                        <p className="small text-muted mb-1">Just now</p>
-                                                        <span className="badge bg-danger rounded-pill float-end">
-                                                            {user.count >0 ? user.count : null}
-                                                        </span>
-                                                    </div>
-                                                </a>
-                                                </li>
-                                            )
+                                <div className="p-1">
+                                    <MDBInputGroup className="rounded mb-3">
+                                        <input
+                                            className="form-control rounded"
+                                            type="password"
+                                            value={password} 
+                                            onChange={(e)=>{e.preventDefault(); setPassword(e.target.value);}}
+                                            onKeyDown={handleKeyDown}
+                                            placeholder="Please input the Password"
+                                            style={{borderColor: 'red'}}
+                                            autoFocus 
+                                        />
+                                        <button
+                                            className="input-group-text rounded"
+                                            style={{marginLeft: "10px", background: "red", color: "white"}}
+                                            id="login-addon"
+                                            onClick={loginAction}
+                                        >
+                                            login
+                                        </button>
+                                    </MDBInputGroup>
+                                </div>
+                                : 
+                                <div className="p-1">
+                                    <MDBInputGroup className="rounded mb-3">
+                                        <input
+                                            type="text"
+                                            className="form-control rounded"
+                                            value={keyword} 
+                                            onChange={(e)=>{e.preventDefault(); setKeyword(e.target.value);}}
+                                            onKeyDown={handleKeyDown}
+                                            placeholder="Search"
+                                            autoFocus 
+                                        />
+                                        <span
+                                            id="search-addon"
+                                            className="input-group-text border-0"
+                                            onClick={(e)=>{e.preventDefault(); searchUsers(keyword);}}
+                                        >
+                                            <MDBIcon fas icon="search" />
+                                        </span>
+                                    </MDBInputGroup>        
+                                    <MDBTypography listUnStyled className="mb-0">
+                                        {
+                                            users && users.map((user, index) => {
+                                                if(user && user.username) {
+                                                    return (
+                                                        <li className="p-2 border-bottom" key={index} onClick={(e) => getMessages(e, user)}>
+                                                        <a
+                                                            href="#"
+                                                            className="d-flex justify-content-between user-item"
+                                                        >
+                                                            <div className="d-flex flex-row col-md-10">
+                                                                <div className="col-md-2">
+                                                                    <img
+                                                                    src="/images/user2.png"
+                                                                    alt="avatar"
+                                                                    className="d-flex align-self-center me-3"
+                                                                    width="60"
+                                                                    height="60"
+                                                                    />
+                                                                    <span className="badge bg-success badge-dot"></span>
+                                                                </div>
+                                                                <div className="pt-1 col-md-10" style={{marginLeft: '15px'}}>
+                                                                    <p className="fw-bold mb-0 ellipsis">{convertAddress(user.username)}</p>
+                                                                    <p className="small text-muted ellipsis"></p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="pt-1 col-md-2">
+                                                                <span className="badge bg-danger rounded-pill float-end">
+                                                                    {user.count >0 ? 
+                                                                    `+ ${user.count}` : user.total && user.total }
+                                                                </span>
+                                                            </div>
+                                                        </a>
+                                                        </li>
+                                                    )
+                                                }
+                                            })
                                         }
-                                    })
-                                }
-                            </MDBTypography>
-                        </div>
+                                    </MDBTypography>
+                                </div>   
+                            }                                              
                         </MDBCol>
                     </MDBRow>
                     </MDBCardBody>

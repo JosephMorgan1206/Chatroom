@@ -1,5 +1,5 @@
-// export const host = "http://localhost:5000";
-export const host = "https://chat-pancake-com.onrender.com";
+export const host = "http://localhost:5000";
+// export const host = "https://chat-pancake-com.onrender.com";
 export const connect = `${host}/api/auth/connect`;
 export const login = `${host}/api/auth/login`;
 export const search = `${host}/api/auth/search`;
@@ -14,5 +14,6 @@ export const updateMessageRoute = `${host}/api/message/update/`;
 export const sendMessageRoute = `${host}/api/message/addmsg`;
 export const removeMessageRoute = `${host}/api/message/removemsg/`;
 export const getAllMessagesRoute = `${host}/api/message/getmsg`;
+export const sendFileRoute = `${host}/api/file/upload`;
 export const getUserRoute = `${host}/api/auth/getuser`;
 export const isValidRoute = `${host}/api/auth/isValidName`;
